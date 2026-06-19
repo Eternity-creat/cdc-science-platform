@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcUploadTaskMapper">
+
+    <insert id="insert" parameterType="CdcUploadTask" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_upload_task(file_name,file_path,status,result_msg)
+        VALUES(#{fileName},#{filePath},#{status},#{resultMsg})
+    </insert>
+
+    <update id="updateStatus" parameterType="CdcUploadTask">
+        UPDATE cdc_upload_task
+        SET status=#{status}, result_msg=#{resultMsg}
+        WHERE id=#{id}
+    </update>
+
+</mapper>

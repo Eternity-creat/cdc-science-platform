@@ -1,0 +1,13 @@
+# 构建产物
+target/
+
+# 本地环境
+.env
+.env.local
+.idea/
+*.iml
+
+# 其他
+.git/
+.gitignore
+*.md

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcArticleRequestMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_article_request
+        (mode, entity_type, entity_id, population_id, scene_id, template_id, word_count, user_text, create_time)
+        VALUES
+            (#{mode}, #{entityType}, #{entityId}, #{populationId}, #{sceneId}, #{templateId}, #{wordCount}, #{userText}, NOW())
+    </insert>
+
+    <select id="getById" resultType="CdcArticleRequest">
+        SELECT * FROM cdc_article_request WHERE id = #{id}
+    </select>
+
+    <select id="listAll" resultType="CdcArticleRequest">
+        SELECT * FROM cdc_article_request ORDER BY create_time DESC
+    </select>
+
+</mapper>

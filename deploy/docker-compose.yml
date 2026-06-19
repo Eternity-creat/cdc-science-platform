@@ -1,0 +1,135 @@
+# ╔══════════════════════════════════════════════════════════╗
+# ║  CDC 科普文章生成平台 — Docker Compose 编排             ║
+# ║                                                          ║
+# ║  启动：docker compose up -d --build                      ║
+# ║  停止：docker compose down                               ║
+# ║  日志：docker compose logs -f                            ║
+# ╚══════════════════════════════════════════════════════════╝
+
+services:
+  # ── MySQL 8.0 ──
+  mysql:
+    image: mysql:8.0
+    container_name: cdc-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: cdc_knowledge
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../db/init_schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./mysql/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 8s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - cdc-net
+
+  # ── Java Backend (Spring Boot) ──
+  backend:
+    build:
+      context: ../cdc-backend
+      dockerfile: ../deploy/backend/Dockerfile
+    container_name: cdc-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/cdc_knowledge?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      AGENT_SERVICE_URL: http://agent:8001
+      AGENT_SERVICE_TIMEOUT: 120000
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v2}
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/article/list || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - cdc-net
+
+  # ── Python Agent (FastAPI + LangGraph) ──
+  agent:
+    build:
+      context: ../cdc-agent
+      dockerfile: ../deploy/agent/Dockerfile
+    container_name: cdc-agent
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-qwen-turbo}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-v2}
+      DEFAULT_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      JAVA_BACKEND_URL: http://backend:8080
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AGENT_PORT: 8001
+    ports:
+      - "${AGENT_PORT:-8001}:8001"
+    volumes:
+      - agent_uploads:/app/uploads/images
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - cdc-net
+
+  # ── React Frontend (Nginx 静态) ──
+  frontend:
+    build:
+      context: ../cdc-frontend
+      dockerfile: ../deploy/frontend/Dockerfile
+    container_name: cdc-frontend
+    expose:
+      - "80"
+    restart: unless-stopped
+    networks:
+      - cdc-net
+
+  # ── Nginx 反向代理（统一入口） ──
+  nginx:
+    image: nginx:alpine
+    container_name: cdc-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - agent
+    restart: unless-stopped
+    networks:
+      - cdc-net
+
+volumes:
+  mysql_data:
+    driver: local
+  agent_uploads:
+    driver: local
+
+networks:
+  cdc-net:
+    driver: bridge

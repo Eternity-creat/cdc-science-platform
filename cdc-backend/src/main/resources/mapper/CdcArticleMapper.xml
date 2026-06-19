@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcArticleMapper">
+
+    <insert id="insert" parameterType="CdcArticle" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_article(request_id,template_id,status)
+        VALUES(#{requestId},#{templateId},1)
+    </insert>
+
+    <select id="getById" parameterType="long" resultType="CdcArticle">
+        SELECT * FROM cdc_article WHERE id=#{id}
+    </select>
+
+    <update id="updateOutline" parameterType="CdcArticle">
+        UPDATE cdc_article SET outline=#{outline}, status=#{status} WHERE id=#{id}
+    </update>
+
+    <update id="updateInitialDraft" parameterType="CdcArticle">
+        UPDATE cdc_article SET initial_draft=#{initialDraft}, status=#{status} WHERE id=#{id}
+    </update>
+
+    <update id="updateFinalArticle" parameterType="CdcArticle">
+        UPDATE cdc_article
+        SET final_article=#{finalArticle}, status=#{status}
+        WHERE id=#{id}
+    </update>
+
+    <update id="autoSaveOutline" parameterType="CdcArticle">
+        UPDATE cdc_article SET outline=#{outline}, update_time=NOW() WHERE id=#{id}
+    </update>
+
+    <update id="autoSaveDraft" parameterType="CdcArticle">
+        UPDATE cdc_article SET initial_draft=#{initialDraft}, update_time=NOW() WHERE id=#{id}
+    </update>
+
+    <update id="autoSaveFinal" parameterType="CdcArticle">
+        UPDATE cdc_article SET final_article=#{finalArticle}, update_time=NOW() WHERE id=#{id}
+    </update>
+
+    <select id="listAll" resultType="com.cdc.cdcbackend.dto.ArticleListItemDTO">
+        SELECT a.id,
+               a.request_id    AS requestId,
+               a.status,
+               a.create_time   AS createTime,
+               a.update_time   AS updateTime,
+               t.template_name AS templateName,
+               r.mode,
+               r.entity_type   AS entityType,
+               r.user_text     AS userText,
+               w.std_name      AS entityName,
+               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id) AS modifyCount
+        FROM cdc_article a
+                 LEFT JOIN cdc_article_template t ON a.template_id = t.id
+                 LEFT JOIN cdc_article_request r ON a.request_id = r.id
+                 LEFT JOIN wiki_entity w ON r.entity_id = w.id
+        ORDER BY a.create_time DESC
+    </select>
+
+    <sql id="articleWhereFilter">
+        <where>
+            <if test="status != null and status != 0">
+                AND a.status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (w.std_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR t.template_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR r.user_text LIKE CONCAT('%', #{keyword}, '%')
+                     OR CAST(a.id AS CHAR) LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM cdc_article a
+                 LEFT JOIN cdc_article_request r ON a.request_id = r.id
+                 LEFT JOIN wiki_entity w ON r.entity_id = w.id
+                 LEFT JOIN cdc_article_template t ON a.template_id = t.id
+        <include refid="articleWhereFilter"/>
+    </select>
+
+    <select id="listPaged" resultType="com.cdc.cdcbackend.dto.ArticleListItemDTO">
+        SELECT a.id,
+               a.request_id    AS requestId,
+               a.status,
+               a.create_time   AS createTime,
+               a.update_time   AS updateTime,
+               t.template_name AS templateName,
+               r.mode,
+               r.entity_type   AS entityType,
+               r.user_text     AS userText,
+               w.std_name      AS entityName,
+               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id) AS modifyCount
+        FROM cdc_article a
+                 LEFT JOIN cdc_article_template t ON a.template_id = t.id
+                 LEFT JOIN cdc_article_request r ON a.request_id = r.id
+                 LEFT JOIN wiki_entity w ON r.entity_id = w.id
+        <include refid="articleWhereFilter"/>
+        ORDER BY a.create_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM cdc_article WHERE id=#{id}
+    </delete>
+
+</mapper>

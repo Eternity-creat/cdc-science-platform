@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.WikiEntityMapper">
+    <select id="listAll" resultType="WikiEntity">
+        SELECT id, entity_type, std_name, alias, summary, create_time, update_time
+        FROM wiki_entity ORDER BY create_time DESC
+    </select>
+
+    <sql id="whereFilter">
+        <where>
+            <if test="type != null and type != 0">
+                AND entity_type = #{type}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (std_name LIKE CONCAT('%', #{keyword}, '%')
+                     OR alias LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </sql>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM wiki_entity
+        <include refid="whereFilter"/>
+    </select>
+
+    <select id="listPaged" resultType="WikiEntity">
+        SELECT id, entity_type, std_name, alias, summary, create_time, update_time
+        FROM wiki_entity
+        <include refid="whereFilter"/>
+        ORDER BY create_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <select id="getById" resultType="WikiEntity">
+        SELECT * FROM wiki_entity WHERE id=#{id}
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wiki_entity(entity_type,std_name,alias,summary,create_time,update_time)
+        VALUES(#{entityType},#{stdName},#{alias},#{summary},NOW(),NOW())
+    </insert>
+    <update id="update">
+        UPDATE wiki_entity
+        SET entity_type=#{entityType}, std_name=#{stdName}, alias=#{alias}, summary=#{summary}, update_time=NOW()
+        WHERE id=#{id}
+    </update>
+    <delete id="delete">
+        DELETE FROM wiki_entity WHERE id=#{id}
+    </delete>
+    <select id="listByType" resultType="WikiEntity">
+        SELECT id,std_name FROM wiki_entity WHERE entity_type=#{type}
+    </select>
+    <select id="findByName" resultType="WikiEntity">
+        SELECT * FROM wiki_entity 
+        WHERE std_name = #{name} AND entity_type = #{type}
+        LIMIT 1
+    </select>
+</mapper>

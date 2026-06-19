@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.WikiSegmentEmbeddingMapper">
+
+    <resultMap id="BaseResultMap" type="com.cdc.cdcbackend.entity.WikiSegmentEmbedding">
+        <id column="id" property="id"/>
+        <result column="segment_id" property="segmentId"/>
+        <result column="entity_id" property="entityId"/>
+        <result column="content_hash" property="contentHash"/>
+        <result column="embedding" property="embedding"/>
+        <result column="model_version" property="modelVersion"/>
+        <result column="dimensions" property="dimensions"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="getBySegmentId" resultMap="BaseResultMap">
+        SELECT * FROM wiki_segment_embedding WHERE segment_id = #{segmentId}
+    </select>
+
+    <select id="listByEntityId" resultMap="BaseResultMap">
+        SELECT * FROM wiki_segment_embedding WHERE entity_id = #{entityId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wiki_segment_embedding (segment_id, entity_id, content_hash, embedding, model_version, dimensions, created_at, updated_at)
+        VALUES (#{segmentId}, #{entityId}, #{contentHash}, #{embedding}, #{modelVersion}, #{dimensions}, NOW(), NOW())
+    </insert>
+
+    <insert id="upsert">
+        INSERT INTO wiki_segment_embedding (segment_id, entity_id, content_hash, embedding, model_version, dimensions, created_at, updated_at)
+        VALUES (#{segmentId}, #{entityId}, #{contentHash}, #{embedding}, #{modelVersion}, #{dimensions}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            content_hash = VALUES(content_hash),
+            embedding = VALUES(embedding),
+            model_version = VALUES(model_version),
+            dimensions = VALUES(dimensions),
+            updated_at = NOW()
+    </insert>
+
+    <delete id="deleteBySegmentId">
+        DELETE FROM wiki_segment_embedding WHERE segment_id = #{segmentId}
+    </delete>
+
+</mapper>

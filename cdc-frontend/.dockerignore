@@ -1,0 +1,13 @@
+# 依赖和构建产物（容器内会重新安装和构建）
+node_modules/
+dist/
+
+# 本地环境
+.env
+.env.local
+
+# 其他
+.git/
+.gitignore
+*.md
+.canvas-meta.json

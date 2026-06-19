@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcAgentTraceMapper">
+
+    <insert id="insert" parameterType="CdcAgentTrace" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_agent_trace(article_id,step_name,step_content,cost_time)
+        VALUES(#{articleId},#{stepName},#{stepContent},#{costTime})
+    </insert>
+
+    <select id="listByArticleId" parameterType="long" resultType="CdcAgentTrace">
+        SELECT * FROM cdc_agent_trace WHERE article_id=#{articleId}
+    </select>
+
+    <delete id="deleteByArticleId" parameterType="long">
+        DELETE FROM cdc_agent_trace WHERE article_id=#{articleId}
+    </delete>
+
+</mapper>

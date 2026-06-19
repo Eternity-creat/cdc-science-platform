@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcArticleModificationMapper">
+
+    <insert id="insert" parameterType="CdcArticleModification" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_article_modification
+            (article_id,modify_type,operation_type,before_content,after_content)
+        VALUES(#{articleId},#{modifyType},#{operationType},#{beforeContent},#{afterContent})
+    </insert>
+
+    <select id="listByArticleId" parameterType="long" resultType="CdcArticleModification">
+        SELECT * FROM cdc_article_modification
+        WHERE article_id=#{articleId}
+        ORDER BY modify_time DESC
+    </select>
+
+    <select id="getById" parameterType="long" resultType="CdcArticleModification">
+        SELECT * FROM cdc_article_modification WHERE id=#{id}
+    </select>
+
+    <delete id="deleteByArticleId" parameterType="long">
+        DELETE FROM cdc_article_modification WHERE article_id=#{articleId}
+    </delete>
+
+</mapper>

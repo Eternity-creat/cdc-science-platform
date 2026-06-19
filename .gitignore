@@ -1,0 +1,32 @@
+# ── 通用 ──
+*.log
+.DS_Store
+Thumbs.db
+
+# ── IDE ──
+.idea/
+.vscode/
+*.iml
+
+# ── 环境变量（含敏感信息，绝不提交） ──
+**/.env
+!**/.env.example
+
+# ── Java Backend ──
+cdc-backend/target/
+
+# ── Python Agent ──
+cdc-agent/__pycache__/
+cdc-agent/**/__pycache__/
+cdc-agent/.venv/
+cdc-agent/venv/
+cdc-agent/uploads/images/*
+!cdc-agent/uploads/images/.gitkeep
+
+# ── 数据库（含业务数据，绝不提交；只提交表结构 init_schema.sql） ──
+db/init.sql
+
+# ── React Frontend ──
+cdc-frontend/node_modules/
+cdc-frontend/dist/
+cdc-frontend/.env.local

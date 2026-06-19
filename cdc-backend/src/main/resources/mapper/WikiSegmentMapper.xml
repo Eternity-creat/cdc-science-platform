@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.WikiSegmentMapper">
+    <select id="listByEntityId" resultType="WikiSegment">
+        SELECT * FROM wiki_segment WHERE entity_id=#{entityId}
+    </select>
+    <select id="listWithEmbeddingByEntityId" resultType="com.cdc.cdcbackend.dto.WikiSegmentEmbeddingDTO">
+        SELECT
+            s.id,
+            s.entity_id AS entityId,
+            s.content,
+            s.source,
+            e.embedding,
+            e.dimensions,
+            e.model_version AS modelVersion
+        FROM wiki_segment s
+        LEFT JOIN wiki_segment_embedding e ON s.id = e.segment_id
+        WHERE s.entity_id = #{entityId}
+        ORDER BY s.id
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wiki_segment(entity_id,content,source,create_time)
+        VALUES(#{entityId},#{content},#{source},NOW())
+    </insert>
+    <update id="update">
+        UPDATE wiki_segment SET entity_id=#{entityId}, content=#{content}, source=#{source} WHERE id=#{id}
+    </update>
+    <delete id="delete">
+        DELETE FROM wiki_segment WHERE id=#{id}
+    </delete>
+    <delete id="deleteByEntityId">
+        DELETE FROM wiki_segment WHERE entity_id=#{entityId}
+    </delete>
+</mapper>

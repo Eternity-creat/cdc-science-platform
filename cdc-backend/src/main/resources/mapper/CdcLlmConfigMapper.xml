@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcLlmConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.cdc.cdcbackend.entity.CdcLlmConfig">
+        <id column="id" property="id"/>
+        <result column="config_name" property="configName"/>
+        <result column="config_type" property="configType"/>
+        <result column="provider" property="provider"/>
+        <result column="model_name" property="modelName"/>
+        <result column="api_key_encrypted" property="apiKeyEncrypted"/>
+        <result column="base_url" property="baseUrl"/>
+        <result column="params" property="params"/>
+        <result column="is_default" property="isDefault"/>
+        <result column="is_enabled" property="isEnabled"/>
+        <result column="description" property="description"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="listAll" resultMap="BaseResultMap">
+        SELECT * FROM cdc_llm_config ORDER BY config_type, is_default DESC, id
+    </select>
+
+    <select id="listByType" resultMap="BaseResultMap">
+        SELECT * FROM cdc_llm_config WHERE config_type = #{configType} ORDER BY is_default DESC, id
+    </select>
+
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT * FROM cdc_llm_config WHERE id = #{id}
+    </select>
+
+    <select id="getDefaultByType" resultMap="BaseResultMap">
+        SELECT * FROM cdc_llm_config
+        WHERE config_type = #{configType} AND is_enabled = 1
+        ORDER BY is_default DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_llm_config (config_name, config_type, provider, model_name, api_key_encrypted, base_url, params, is_default, is_enabled, description)
+        VALUES (#{configName}, #{configType}, #{provider}, #{modelName}, #{apiKeyEncrypted}, #{baseUrl}, #{params}, #{isDefault}, #{isEnabled}, #{description})
+    </insert>
+
+    <update id="update">
+        UPDATE cdc_llm_config
+        SET config_name = #{configName}, config_type = #{configType}, provider = #{provider},
+            model_name = #{modelName}, api_key_encrypted = #{apiKeyEncrypted}, base_url = #{baseUrl},
+            params = #{params}, is_default = #{isDefault}, is_enabled = #{isEnabled}, description = #{description}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM cdc_llm_config WHERE id = #{id}
+    </delete>
+
+    <update id="setDefault">
+        UPDATE cdc_llm_config SET is_default = 1 WHERE id = #{id}
+    </update>
+
+    <update id="clearDefault">
+        UPDATE cdc_llm_config SET is_default = 0 WHERE config_type = #{configType}
+    </update>
+</mapper>
