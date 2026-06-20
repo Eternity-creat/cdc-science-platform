@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
@@ -349,8 +350,10 @@ export default function Workbench() {
       setOutlineItems(parseOutlineToTree(editOutline));
       const mods = await articleApi.getModifications(id).catch(() => []);
       setModifications(parseModifications(mods));
+      toast.success('大纲已保存');
     } catch (e) {
       console.error('保存大纲失败:', e);
+      toast.error('保存失败', { description: e.message || '请检查网络连接后重试' });
     } finally {
       setSaving(false);
     }
@@ -428,8 +431,10 @@ export default function Workbench() {
       setDraftText(editDraft);
       const mods = await articleApi.getModifications(id).catch(() => []);
       setModifications(parseModifications(mods));
+      toast.success('初稿已保存');
     } catch (e) {
       console.error('保存初稿失败:', e);
+      toast.error('保存失败', { description: e.message || '请检查网络连接后重试' });
     } finally {
       setSaving(false);
     }

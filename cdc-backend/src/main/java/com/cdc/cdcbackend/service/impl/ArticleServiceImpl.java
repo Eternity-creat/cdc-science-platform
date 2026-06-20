@@ -458,6 +458,7 @@ public class ArticleServiceImpl implements ArticleService {
         CdcArticle up = new CdcArticle();
         up.setId(id);
         up.setOutline(newContent);
+        up.setStatus(old.getStatus());
         return articleMapper.updateOutline(up) > 0;
     }
 
@@ -477,6 +478,7 @@ public class ArticleServiceImpl implements ArticleService {
         CdcArticle up = new CdcArticle();
         up.setId(id);
         up.setInitialDraft(newContent);
+        up.setStatus(old.getStatus());
         return articleMapper.updateInitialDraft(up) > 0;
     }
 

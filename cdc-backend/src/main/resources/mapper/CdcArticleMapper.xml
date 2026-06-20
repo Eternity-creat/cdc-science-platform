@@ -12,11 +12,17 @@
     </select>
 
     <update id="updateOutline" parameterType="CdcArticle">
-        UPDATE cdc_article SET outline=#{outline}, status=#{status} WHERE id=#{id}
+        UPDATE cdc_article SET outline=#{outline}
+        <if test="status != null">, status=#{status}</if>
+        , update_time=NOW()
+        WHERE id=#{id}
     </update>
 
     <update id="updateInitialDraft" parameterType="CdcArticle">
-        UPDATE cdc_article SET initial_draft=#{initialDraft}, status=#{status} WHERE id=#{id}
+        UPDATE cdc_article SET initial_draft=#{initialDraft}
+        <if test="status != null">, status=#{status}</if>
+        , update_time=NOW()
+        WHERE id=#{id}
     </update>
 
     <update id="updateFinalArticle" parameterType="CdcArticle">
