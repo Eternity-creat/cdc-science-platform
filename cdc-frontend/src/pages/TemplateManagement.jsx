@@ -38,7 +38,13 @@ function parseJsonField(field) {
     const parsed = JSON.parse(field);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return field.split('、').filter(Boolean);
+    // 处理 MySQL 导出的字面 \n（两个字符）→ 替换为真实换行符
+    const normalized = field.replace(/\\n/g, '\n');
+    // 优先按换行符拆分，若没有换行则按顿号拆分
+    if (normalized.includes('\n')) {
+      return normalized.split('\n').map(s => s.trim()).filter(Boolean);
+    }
+    return normalized.split('、').filter(Boolean);
   }
 }
 
@@ -191,6 +197,8 @@ export default function TemplateManagement() {
   // ---------- Outline preview ----------
   const outlinePreview = (items, maxItems = 4) => {
     if (!items.length) return null;
+    // 去掉数据中已有的数字前缀（如 "1. " 或 "1、"），统一由渲染层加编号
+    const clean = (text) => text.replace(/^\d+[\.\、\)\s]+\s*/, '');
     return (
       <div className="rounded-[var(--radius-md)] bg-accent/60 p-3">
         <p className="text-micro font-medium text-muted-foreground/60 uppercase tracking-wider mb-2">
@@ -199,12 +207,12 @@ export default function TemplateManagement() {
         <div className="space-y-1.5">
           {items.slice(0, maxItems).map((item, i) => (
             <div key={i} className="flex items-center gap-2">
-              <div className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
-              <span className="text-label text-muted-foreground truncate">{item}</span>
+              <span className="text-micro font-semibold text-primary/70 shrink-0 w-4 text-right">{i + 1}.</span>
+              <span className="text-label text-muted-foreground truncate">{clean(item)}</span>
             </div>
           ))}
           {items.length > maxItems && (
-            <span className="text-micro text-muted-foreground/60 pl-3">
+            <span className="text-micro text-muted-foreground/60 pl-6">
               +{items.length - maxItems} 更多章节
             </span>
           )}
