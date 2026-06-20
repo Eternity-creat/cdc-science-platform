@@ -82,7 +82,7 @@ services:
     ports:
       - "${AGENT_PORT:-8001}:8001"
     volumes:
-      - agent_uploads:/app/uploads/images
+      - ../cdc-agent/uploads/images:/app/uploads/images
     depends_on:
       backend:
         condition: service_healthy
@@ -126,8 +126,6 @@ services:
 
 volumes:
   mysql_data:
-    driver: local
-  agent_uploads:
     driver: local
 
 networks:
