@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
-  RefreshCw, RotateCcw, AlertTriangle, X
+  RefreshCw, RotateCcw, AlertTriangle, X, List
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../components/ui/button.jsx';
@@ -184,6 +184,7 @@ export default function Workbench() {
   const [editorTab, setEditorTab] = useState('draft');
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showOutlineTree, setShowOutlineTree] = useState(true);
 
   /* Refs for auto-save */
   const autoSaveTimer = useRef(null);
@@ -593,7 +594,7 @@ export default function Workbench() {
         <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(null)} />
 
         {/* Top Bar */}
-        <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter">
+        <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter flex-wrap gap-y-2">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground " onClick={() => navigate('/articles')}>
               <ArrowLeft size={14} /> 返回
@@ -605,18 +606,18 @@ export default function Workbench() {
           <div className="flex items-center gap-2">
             {!hasOutline ? (
               <Button size="sm" className="gap-1.5 " onClick={handleGenerateOutline}>
-                <Wand2 size={14} /> AI 生成大纲
+                <Wand2 size={14} /> <span className="hidden sm:inline">AI 生成大纲</span>
               </Button>
             ) : (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateOutline}>
-                  <RefreshCw size={14} /> 重新生成
+                  <RefreshCw size={14} /> <span className="hidden sm:inline">重新生成</span>
                 </Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 " onClick={handleSaveOutline} disabled={saving}>
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 保存
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} <span className="hidden sm:inline">保存</span>
                 </Button>
                 <Button size="sm" className="gap-1.5 " onClick={handleConfirmOutlineAndGenerateDraft}>
-                  <Sparkles size={14} /> 确认大纲并生成初稿
+                  <Sparkles size={14} /> <span className="hidden md:inline">确认大纲并生成初稿</span>
                 </Button>
               </>
             )}
@@ -636,8 +637,20 @@ export default function Workbench() {
 
         {/* Two-panel layout */}
         <div className="flex flex-1 overflow-hidden enter" style={{ '--enter-delay': '120ms' }}>
+          {/* Mobile toggle for outline tree */}
+          <button
+            className="md:hidden shrink-0 p-2 border-r hover:bg-accent/50 transition-colors self-start mt-2 ml-1 rounded-md"
+            onClick={() => setShowOutlineTree(!showOutlineTree)}
+            title={showOutlineTree ? '隐藏大纲树' : '显示大纲树'}
+          >
+            <List size={16} className="text-muted-foreground" />
+          </button>
           {/* Left: outline tree */}
-          <div className="w-[280px] shrink-0 border-r">
+          <div className={cn(
+            "shrink-0 border-r overflow-hidden",
+            showOutlineTree ? "flex" : "hidden",
+            "md:flex w-full md:w-[280px]"
+          )}>
             <ScrollArea className="h-full py-2">
               {outlineItems.length > 0 ? outlineItems.map((item, idx) => (
                 <OutlineTreeItem key={item.id} item={item} expanded={outlineExpanded} toggle={toggleOutline} index={idx} />
@@ -705,7 +718,7 @@ export default function Workbench() {
         <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(null)} />
 
         {/* Top Bar */}
-        <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter">
+        <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter flex-wrap gap-y-2">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground " onClick={() => navigate('/articles')}>
               <ArrowLeft size={14} /> 返回
@@ -716,13 +729,13 @@ export default function Workbench() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateDraft}>
-              <RefreshCw size={14} /> 重新生成初稿
+              <RefreshCw size={14} /> <span className="hidden sm:inline">重新生成<span className="hidden md:inline">初稿</span></span>
             </Button>
             <Button variant="ghost" size="sm" className="gap-1.5 " onClick={handleSaveDraft} disabled={saving}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 保存
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} <span className="hidden sm:inline">保存</span>
             </Button>
             <Button size="sm" className="gap-1.5 " onClick={handleConfirmDraft}>
-              <FileCheck2 size={14} /> 确认终稿
+              <FileCheck2 size={14} /> <span className="hidden sm:inline">确认终稿</span>
             </Button>
           </div>
         </div>
@@ -828,7 +841,7 @@ export default function Workbench() {
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(null)} />
 
       {/* Top Bar */}
-      <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter">
+      <div className="flex shrink-0 items-center justify-between border-b bg-muted/30 px-5 py-2.5 enter flex-wrap gap-y-2">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground " onClick={() => navigate('/articles')}>
             <ArrowLeft size={14} /> 返回
@@ -839,10 +852,10 @@ export default function Workbench() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="gap-1.5 " onClick={() => setShowPreview(true)}>
-            <Eye size={14} /> 预览
+            <Eye size={14} /> <span className="hidden sm:inline">预览</span>
           </Button>
           <Button variant="ghost" size="sm" className="gap-1.5 " onClick={handleExportMarkdown}>
-            <Download size={14} /> 导出
+            <Download size={14} /> <span className="hidden sm:inline">导出</span>
           </Button>
         </div>
       </div>

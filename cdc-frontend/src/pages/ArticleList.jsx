@@ -189,8 +189,8 @@ export default function ArticleList() {
 
       {/* Search & Filter */}
       <div className="surface-card p-4 mb-4 enter" style={{ '--enter-delay': '200ms' }}>
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-9 h-10"
@@ -199,7 +199,7 @@ export default function ArticleList() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             {statusFilter.map(f => (
               <Button
                 key={f.key}

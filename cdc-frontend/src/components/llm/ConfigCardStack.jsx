@@ -68,8 +68,8 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">配置名称</label>
           <Input
             placeholder="例如：GPT-4o 文章生成配置"
@@ -98,7 +98,7 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
             onChange={e => onField('modelName', e.target.value)}
           />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">API Key</label>
           <Input
             type="password"
@@ -107,7 +107,7 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
             onChange={e => onField('apiKeyEncrypted', e.target.value)}
           />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">Base URL</label>
           <Input
             placeholder="可选，自定义 API 端点地址"
@@ -115,7 +115,7 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
             onChange={e => onField('baseUrl', e.target.value)}
           />
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">模型参数</label>
           <Textarea
             placeholder='{"temperature": 0.7, "max_tokens": 2048}'
@@ -126,7 +126,7 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
           />
           <p className="text-micro text-muted-foreground">JSON 格式，可选</p>
         </div>
-        <div className="col-span-2 space-y-1.5">
+        <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">描述</label>
           <Input
             placeholder="配置说明，便于区分"
