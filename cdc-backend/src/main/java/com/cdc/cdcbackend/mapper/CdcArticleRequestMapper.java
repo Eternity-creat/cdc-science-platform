@@ -15,4 +15,7 @@ public interface CdcArticleRequestMapper {
 
     // 查询所有记录
     List<CdcArticleRequest> listAll();
+
+    // BUG-NEW-12 fix: 删除文章时级联清理请求记录
+    int deleteById(Long id);
 }

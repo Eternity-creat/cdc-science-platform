@@ -116,7 +116,7 @@ public class AgentClient {
             return extractContent(rawResponse, step);
         } catch (Exception e) {
             log.error("调用 Agent 服务失败: {}", e.getMessage(), e);
-            return "Agent 服务异常：" + e.getMessage();
+            throw new RuntimeException("Agent 服务异常：" + e.getMessage(), e);
         }
     }
 
@@ -155,7 +155,7 @@ public class AgentClient {
             if (detailNode != null) {
                 String errorMsg = detailNode.asText();
                 log.error("Agent 返回错误: {}", errorMsg);
-                return "Agent 错误：" + errorMsg;
+                throw new RuntimeException("Agent 错误：" + errorMsg);
             }
             
             log.warn("Agent 响应中未找到 content 字段 (step={}), 原样返回", step);

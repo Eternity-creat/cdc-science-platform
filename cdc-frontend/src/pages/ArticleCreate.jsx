@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   FileText, MessageSquareText, ArrowRight, ArrowLeft,
   CheckCircle2, Sparkles, Lightbulb, Bug, Pill, Users, MapPin,
@@ -98,12 +99,44 @@ export default function ArticleCreate() {
     { num: 4, label: '模板设置' },
   ];
 
-  const handleParse = () => {
-    /* Free text parse - call backend */
-    setParsed({ userText: freeText, templateId: freeTextTemplateId });
+  const handleParse = async () => {
+    /* FE-3 fix: 调用后端 parse-intent 接口进行智能解析 */
+    if (!freeText.trim()) {
+      toast.error('请输入文章需求描述');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const parsed = await articleApi.parseIntent(freeText);
+      setParsed({ userText: freeText, templateId: freeTextTemplateId, ...parsed });
+      toast.success('智能解析完成');
+    } catch (e) {
+      console.error('智能解析失败:', e);
+      // Fallback: use local parsing
+      setParsed({ userText: freeText, templateId: freeTextTemplateId });
+      toast.error('智能解析失败，已使用本地解析', { description: e.message || '' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmitForm = async () => {
+    // FE-2 fix: 表单校验
+    if (!formData.entityType) {
+      toast.error('请先选择实体类型（疾病/疫苗）');
+      setStep(1);
+      return;
+    }
+    if (!formData.entityId) {
+      toast.error('请先选择具体实体');
+      setStep(2);
+      return;
+    }
+    if (!formData.templateId) {
+      toast.error('请先选择模板');
+      setStep(4);
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await articleApi.createArticle({
@@ -120,12 +153,17 @@ export default function ArticleCreate() {
       }
     } catch (e) {
       console.error('创建文章失败:', e);
+      toast.error('创建文章失败', { description: e.message || '请重试' });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleSubmitText = async () => {
+    if (!freeText.trim()) {
+      toast.error('请输入文章需求描述');
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await articleApi.generateFromText(freeText, parseInt(freeTextTemplateId) || 1);
@@ -134,6 +172,7 @@ export default function ArticleCreate() {
       }
     } catch (e) {
       console.error('创建文章失败:', e);
+      toast.error('创建文章失败', { description: e.message || '请重试' });
     } finally {
       setSubmitting(false);
     }
@@ -596,7 +635,18 @@ export default function ArticleCreate() {
               上一步
             </Button>
             {step < 4 ? (
-              <Button className="gap-1 " onClick={() => setStep(step + 1)}>
+              <Button className="gap-1 " onClick={() => {
+                // FE-2 fix: 步骤校验
+                if (step === 1 && !formData.entityType) {
+                  toast.error('请先选择实体类型');
+                  return;
+                }
+                if (step === 2 && !formData.entityId) {
+                  toast.error('请先选择具体实体');
+                  return;
+                }
+                setStep(step + 1);
+              }}>
                 下一步
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>

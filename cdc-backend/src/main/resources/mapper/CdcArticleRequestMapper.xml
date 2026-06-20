@@ -19,4 +19,9 @@
         SELECT * FROM cdc_article_request ORDER BY create_time DESC
     </select>
 
+    <!-- BUG-NEW-12 fix: 删除文章时级联清理请求记录 -->
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM cdc_article_request WHERE id = #{id}
+    </delete>
+
 </mapper>

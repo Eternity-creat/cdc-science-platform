@@ -8,5 +8,6 @@ public interface CdcArticleModificationMapper {
     int insert(CdcArticleModification dto);
     List<CdcArticleModification> listByArticleId(Long articleId);
     CdcArticleModification getById(Long id);
+    int updateById(CdcArticleModification mod);  // BUG-NEW-5 fix: 支持 update 操作
     int deleteByArticleId(Long articleId);
 }

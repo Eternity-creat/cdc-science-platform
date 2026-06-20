@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional
 from app.models.schemas import AgentRequest, RetrieveRequest, RetrieveResponse
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
 @router.post("/parse-intent")
-async def parse_intent(user_text: str) -> dict:
+async def parse_intent(user_text: str = Body(..., embed=True)) -> dict:
     """意图解析接口：从自由文本中解析出结构化参数"""
     logger.info(f"接收到意图解析请求: user_text={user_text[:50]}...")
     

@@ -69,6 +69,10 @@ public class ArticleServiceImpl implements ArticleService {
     @Resource
     private WikiSegmentEmbeddingMapper embeddingMapper;
 
+    // BUG-NEW-12 fix: 注入 imageMapper 用于删除文章时级联清理配图
+    @Resource
+    private CdcArticleImageMapper articleImageMapper;
+
     @Override
     public Long createEmptyArticle(Long requestId, Long templateId) {
         CdcArticle article = new CdcArticle();
@@ -87,6 +91,15 @@ public class ArticleServiceImpl implements ArticleService {
         return articleMapper.getById(id);
     }
 
+    // BUG-NEW-4 fix: 安全的 getArticle，不存在时抛出异常而非返回 null 导致 NPE
+    private CdcArticle getArticleOrThrow(Long id) {
+        CdcArticle article = articleMapper.getById(id);
+        if (article == null) {
+            throw new RuntimeException("文章不存在: id=" + id);
+        }
+        return article;
+    }
+
     @Override
     public List<ArticleListItemDTO> listArticles() {
         return articleMapper.listAll();
@@ -94,6 +107,8 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public PageResult<ArticleListItemDTO> listArticlesPaged(int page, int size, Integer status, String keyword) {
+        // BUG-NEW-11 fix: 防止 page < 1 导致 offset 为负数
+        page = Math.max(1, page);
         int offset = (page - 1) * size;
         long total = articleMapper.count(status, keyword);
         List<ArticleListItemDTO> list = articleMapper.listPaged(offset, size, status, keyword);
@@ -309,7 +324,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public String generateOutline(Long articleId) {
-        CdcArticle article = getArticle(articleId);
+        CdcArticle article = getArticleOrThrow(articleId);
         CdcArticleRequest req = requestMapper.getById(article.getRequestId());
 
         WikiTemplateContext context = buildContextFromArticle(articleId);
@@ -333,7 +348,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public String generateDraft(Long articleId) {
-        CdcArticle article = getArticle(articleId);
+        CdcArticle article = getArticleOrThrow(articleId);
         CdcArticleRequest req = requestMapper.getById(article.getRequestId());
 
         WikiTemplateContext context = buildContextFromArticle(articleId);
@@ -444,7 +459,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public boolean saveOutline(Long id, String newContent) {
-        CdcArticle old = getArticle(id);
+        CdcArticle old = getArticleOrThrow(id);
 
         CdcArticleModification m = new CdcArticleModification();
         m.setArticleId(id);
@@ -464,7 +479,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public boolean saveDraft(Long id, String newContent) {
-        CdcArticle old = getArticle(id);
+        CdcArticle old = getArticleOrThrow(id);
 
         CdcArticleModification m = new CdcArticleModification();
         m.setArticleId(id);
@@ -485,7 +500,7 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public boolean confirmOutline(Long id, String content) {
         // Save the outline and keep status=2
-        CdcArticle old = getArticle(id);
+        CdcArticle old = getArticleOrThrow(id);
         if (content != null && !content.equals(old.getOutline())) {
             CdcArticleModification m = new CdcArticleModification();
             m.setArticleId(id);
@@ -507,7 +522,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public boolean confirmDraft(Long id) {
-        CdcArticle article = getArticle(id);
+        CdcArticle article = getArticleOrThrow(id);
         if (article == null || article.getInitialDraft() == null) {
             throw new RuntimeException("文章不存在或尚无初稿");
         }
@@ -522,7 +537,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public String regenerateOutline(Long articleId) {
-        CdcArticle article = getArticle(articleId);
+        CdcArticle article = getArticleOrThrow(articleId);
         CdcArticleRequest req = requestMapper.getById(article.getRequestId());
         WikiTemplateContext context = buildContextFromArticle(articleId);
 
@@ -548,8 +563,8 @@ public class ArticleServiceImpl implements ArticleService {
             CdcArticleModification lastMod = mods.get(0);
             if ("ai_regenerate".equals(lastMod.getOperationType())) {
                 lastMod.setAfterContent(outline);
-                // Re-insert with updated afterContent
-                modifyMapper.insert(lastMod);
+                // BUG-NEW-5 fix: 用 updateById 替代 insert，避免重复插入记录
+                modifyMapper.updateById(lastMod);
             }
         }
 
@@ -565,7 +580,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public String regenerateDraft(Long articleId) {
-        CdcArticle article = getArticle(articleId);
+        CdcArticle article = getArticleOrThrow(articleId);
         CdcArticleRequest req = requestMapper.getById(article.getRequestId());
         WikiTemplateContext context = buildContextFromArticle(articleId);
 
@@ -624,9 +639,13 @@ public class ArticleServiceImpl implements ArticleService {
             throw new RuntimeException("修改记录不存在");
         }
 
-        CdcArticle article = getArticle(articleId);
+        CdcArticle article = getArticleOrThrow(articleId);
         String currentContent;
+        // BUG-NEW-9 fix: beforeContent 可能为 null（首次创建时的修改记录）
         String restoreContent = mod.getBeforeContent();
+        if (restoreContent == null) {
+            throw new RuntimeException("该修改记录没有可回退的前一版本内容");
+        }
 
         // Record this revert as a modification
         CdcArticleModification revertMod = new CdcArticleModification();
@@ -663,7 +682,11 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public boolean confirmFinal(Long id) {
-        CdcArticle article = getArticle(id);
+        CdcArticle article = getArticleOrThrow(id);
+        // BUG-NEW-3 fix: 校验初稿是否存在
+        if (article.getInitialDraft() == null) {
+            throw new RuntimeException("文章尚无初稿，无法确认终稿");
+        }
         CdcArticle up = new CdcArticle();
         up.setId(id);
         up.setFinalArticle(article.getInitialDraft());
@@ -708,9 +731,14 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public boolean deleteArticle(Long id) {
-        // 级联删除：留痕记录 + Agent 轨迹 + 文章本身
+        // BUG-NEW-12 fix: 完整级联删除：配图 + 请求记录 + 留痕记录 + Agent 轨迹 + 文章本身
+        CdcArticle article = articleMapper.getById(id);
+        articleImageMapper.deleteByArticleId(id);
         modifyMapper.deleteByArticleId(id);
         traceMapper.deleteByArticleId(id);
+        if (article != null && article.getRequestId() != null) {
+            requestMapper.deleteById(article.getRequestId());
+        }
         return articleMapper.deleteById(id) > 0;
     }
 }

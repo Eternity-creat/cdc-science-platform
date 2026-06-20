@@ -76,3 +76,6 @@ export const getRecord = (id) => get(`/article/record/${id}`);
 
 /** 获取全部表单提交记录 */
 export const listRecords = () => get(`/article/record/list`);
+
+/** FE-3 fix: 调用 Agent 意图解析接口（自由文本 → 结构化参数） */
+export const parseIntent = (userText) => post(`/agent/parse-intent`, { user_text: userText });

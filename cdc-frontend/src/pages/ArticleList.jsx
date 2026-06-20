@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Search, Plus, Edit3, Eye, FileText, Clock, History, Bug, Pill, ChevronRight, Trash2, Loader2, FilePlus, ClipboardList, PenLine, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Card } from '../components/ui/card.jsx';
@@ -70,6 +71,7 @@ export default function ArticleList() {
       setTotal(data.total || 0);
     } catch (e) {
       console.error('加载文章列表失败:', e);
+      toast.error('加载文章列表失败', { description: e.message || '请刷新重试' });
     } finally {
       setLoading(false);
     }
@@ -125,8 +127,10 @@ export default function ArticleList() {
       setDeleteTarget(null);
       fetchData(page);
       fetchStatusCounts();
+      toast.success('文章已删除');
     } catch (e) {
       console.error('删除文章失败:', e);
+      toast.error('删除文章失败', { description: e.message || '请重试' });
     } finally {
       setDeleting(false);
     }

@@ -92,6 +92,10 @@ public class ArticleController {
     // 11. 自动保存（轻量，不记录修改历史）
     @PostMapping("/{id}/autosave")
     public Result<Boolean> autoSave(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        // BUG-NEW-10 fix: 输入校验
+        if (body == null || !body.containsKey("content")) {
+            return Result.fail("缺少必填参数: content");
+        }
         String field = body.getOrDefault("field", "outline");
         String content = body.get("content");
         return Result.success(articleService.autoSave(id, field, content));
@@ -100,6 +104,10 @@ public class ArticleController {
     // 12. 回退到历史版本
     @PostMapping("/{id}/revert")
     public Result<Boolean> revert(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+        // BUG-NEW-10 fix: 输入校验
+        if (body == null || body.get("modificationId") == null) {
+            return Result.fail("缺少必填参数: modificationId");
+        }
         Long modificationId = body.get("modificationId");
         return Result.success(articleService.revertToModification(id, modificationId));
     }

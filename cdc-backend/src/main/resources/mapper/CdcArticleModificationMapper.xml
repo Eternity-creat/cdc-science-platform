@@ -22,4 +22,11 @@
         DELETE FROM cdc_article_modification WHERE article_id=#{articleId}
     </delete>
 
+    <!-- BUG-NEW-5 fix: 新增 updateById，用于 regenerateOutline 时更新 afterContent -->
+    <update id="updateById" parameterType="CdcArticleModification">
+        UPDATE cdc_article_modification
+        SET after_content=#{afterContent}
+        WHERE id=#{id}
+    </update>
+
 </mapper>

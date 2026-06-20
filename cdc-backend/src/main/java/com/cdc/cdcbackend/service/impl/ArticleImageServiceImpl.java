@@ -5,6 +5,7 @@ import com.cdc.cdcbackend.service.ArticleImageService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class ArticleImageServiceImpl implements ArticleImageService {
@@ -48,8 +49,7 @@ public class ArticleImageServiceImpl implements ArticleImageService {
 
     @Override
     public String generateImageKey(Long articleId) {
-        List<CdcArticleImage> existing = imageMapper.listByArticleId(articleId);
-        int nextNum = existing.size() + 1;
-        return String.format("img_%03d", nextNum);
+        // BUG-NEW-8 fix: 使用时间戳+随机数替代 count 方式，避免并发冲突
+        return "img_" + System.currentTimeMillis() + "_" + ThreadLocalRandom.current().nextInt(1000);
     }
 }

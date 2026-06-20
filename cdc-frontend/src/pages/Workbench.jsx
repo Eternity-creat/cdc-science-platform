@@ -224,6 +224,7 @@ export default function Workbench() {
         }
       } catch (e) {
         console.error('加载文章失败:', e);
+        toast.error('加载文章失败', { description: e.message || '请刷新页面重试' });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -303,6 +304,7 @@ export default function Workbench() {
       }
     } catch (e) {
       console.error('生成大纲失败:', e);
+      toast.error('生成大纲失败', { description: e.message || '请重试' });
     } finally {
       setGenerating(false);
       setGeneratingLabel('');
@@ -334,6 +336,7 @@ export default function Workbench() {
           }
         } catch (e) {
           console.error('重新生成大纲失败:', e);
+          toast.error('重新生成大纲失败', { description: e.message || '请重试' });
         } finally {
           setGenerating(false);
           setGeneratingLabel('');
@@ -361,10 +364,16 @@ export default function Workbench() {
 
   const handleConfirmOutlineAndGenerateDraft = async () => {
     // First save outline if changed
-    if (editOutline !== outline) {
-      await articleApi.confirmOutline(id, editOutline);
-      setOutline(editOutline);
-      setOutlineItems(parseOutlineToTree(editOutline));
+    try {
+      if (editOutline !== outline) {
+        await articleApi.confirmOutline(id, editOutline);
+        setOutline(editOutline);
+        setOutlineItems(parseOutlineToTree(editOutline));
+      }
+    } catch (e) {
+      console.error('确认大纲失败:', e);
+      toast.error('确认大纲失败', { description: e.message || '请重试' });
+      return;
     }
     // Then generate draft
     setGenerating(true);
@@ -386,6 +395,7 @@ export default function Workbench() {
       }
     } catch (e) {
       console.error('生成初稿失败:', e);
+      toast.error('生成初稿失败', { description: e.message || '请重试' });
     } finally {
       setGenerating(false);
       setGeneratingLabel('');
@@ -416,6 +426,7 @@ export default function Workbench() {
           }
         } catch (e) {
           console.error('重新生成初稿失败:', e);
+          toast.error('重新生成初稿失败', { description: e.message || '请重试' });
         } finally {
           setGenerating(false);
           setGeneratingLabel('');
@@ -442,9 +453,15 @@ export default function Workbench() {
 
   const handleConfirmDraft = async () => {
     // Save draft if changed
-    if (editDraft !== draftText) {
-      await articleApi.saveDraft(id, editDraft);
-      setDraftText(editDraft);
+    try {
+      if (editDraft !== draftText) {
+        await articleApi.saveDraft(id, editDraft);
+        setDraftText(editDraft);
+      }
+    } catch (e) {
+      console.error('保存初稿失败:', e);
+      toast.error('保存初稿失败', { description: e.message || '请重试' });
+      return;
     }
     try {
       await articleApi.confirmDraft(id);
@@ -459,8 +476,10 @@ export default function Workbench() {
           setEditDraft(art.initialDraft);
         }
       }
+      toast.success('终稿已确认');
     } catch (e) {
       console.error('确认终稿失败:', e);
+      toast.error('确认终稿失败', { description: e.message || '请重试' });
     }
   };
 
@@ -491,8 +510,10 @@ export default function Workbench() {
           }
           const mods = await articleApi.getModifications(id).catch(() => []);
           setModifications(parseModifications(mods));
+          toast.success('已回退到历史版本');
         } catch (e) {
           console.error('回退失败:', e);
+          toast.error('回退失败', { description: e.message || '请重试' });
         }
       },
     });

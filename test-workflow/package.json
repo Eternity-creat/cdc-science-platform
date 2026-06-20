@@ -1,0 +1,15 @@
+{
+  "name": "cdc-test-workflow",
+  "version": "1.0.0",
+  "description": "CDC 科普平台工作流模拟测试 — 完事可整目录删除",
+  "private": true,
+  "scripts": {
+    "mock": "node mock-server.js",
+    "test": "node run-test.js",
+    "dashboard": "echo \"打开 test-dashboard.html\" && start test-dashboard.html"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  }
+}

@@ -262,6 +262,7 @@ FactCheck    RuleCheck
 - **回退** → `POST /api/article/{id}/revert` → 恢复到任意历史版本
 - **确认终稿** → `POST /api/article/{id}/confirm-draft` → status 变为 4
 - **导出 Markdown** → 前端本地处理，清理 `{ref:N}` 标记和转义字符，下载 `.md` 文件
+- **删除文章** → `DELETE /api/article/{id}` → 级联清理配图（cdc_article_image）+ 修改历史（cdc_article_modification）+ Agent 轨迹（cdc_agent_trace）+ 请求记录（cdc_article_request）+ 文章本身（cdc_article）
 
 ## 表关系总结
 
@@ -285,5 +286,6 @@ cdc_article (文章记录，status 1→2→3→4)
   ├─→ cdc_article_modification (每次变更记录)
   ├─→ cdc_agent_trace (Agent 执行追踪)
   ├─→ cdc_article_image (配图)
-  └─→ cdc_agent_feedback (用户编辑反馈)
+  ├─→ cdc_agent_feedback (用户编辑反馈)
+  └─→ cdc_article_request (创建参数，删除文章时级联清理)
 ```

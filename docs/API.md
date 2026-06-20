@@ -189,7 +189,9 @@ GET /api/article/{id}/trace
 ```
 DELETE /api/article/{id}
 ```
-级联删除文章及其修改历史、执行追踪。
+级联删除文章及其修改历史、执行追踪、配图记录和请求记录。
+
+> **v1.1.0 变更**：级联范围扩展至 `cdc_article_image`（配图）和 `cdc_article_request`（请求记录）。
 
 ### 文章上下文
 
@@ -322,6 +324,8 @@ DELETE /api/wiki/rule/{id}           # 删除规则
 }
 ```
 
+> **v1.1.0 修复**：`entityId` 字段已添加到 `WikiRule` 实体类，确保创建规则时 `entity_id` 列正确写入数据库（此前该字段缺失导致写入 NULL）。
+
 ruleType 可选值：`MustInclude`（必须包含）、`MustNotSay`（禁止表述）、`FactRule`（事实规则）。
 
 ### 实体关系 CRUD
@@ -399,9 +403,16 @@ Agent 端点不包裹在 Result 信封中，直接返回业务对象。
 ### 意图解析
 
 ```
-POST /api/agent/parse-intent?user_text=写一篇关于HPV疫苗女性接种的科普文章
+POST /api/agent/parse-intent
+Content-Type: application/json
+
+{
+  "user_text": "写一篇关于HPV疫苗女性接种的科普文章"
+}
 ```
 将自由文本解析为结构化参数：entity_type、entity_name、population_name、scene_name、word_count。
+
+> **v1.1.0 变更**：参数从 query string (`?user_text=...`) 改为 JSON body (`{"user_text": "..."}`)，与 Java 后端 `RestTemplate.postForObject` 的调用方式一致。
 
 ### 向量检索
 
