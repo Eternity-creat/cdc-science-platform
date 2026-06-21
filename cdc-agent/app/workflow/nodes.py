@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from app.skills.registry import SkillRegistry
 from app.models.state import AgentState
+from app.skills.writing.skill_loader import get_skill_loader
 from loguru import logger
 
 
@@ -105,32 +106,66 @@ async def template_load_node(state: AgentState) -> AgentState:
 
 
 async def compress_knowledge_node(state: AgentState) -> AgentState:
-    """7. 知识压缩：压缩大量知识片段，处理LLM上下文限制"""
-    logger.info("节点 [7/12] compress_knowledge 完成")
-    return {"step": state.get("step", "")}
+    """7. 知识压缩：过滤与当前主题相关性低的知识片段，控制 token 消耗
+    
+    策略：对 top_k_segment_list 按相似度分数过滤，
+    只保留距离 >= 中位数的片段，最多保留 8 条。
+    """
+    segments = state.get("top_k_segment_list", [])
+    if not segments or len(segments) <= 5:
+        logger.info("节点 [7/12] compress_knowledge 跳过（片段数不足）")
+        return {"step": state.get("step", "")}
+    
+    # 按 distance 分数过滤（高分为更相关）
+    distances = [s.get("distance", 0) for s in segments if isinstance(s, dict)]
+    if not distances:
+        logger.info("节点 [7/12] compress_knowledge 跳过（无距离信息）")
+        return {"step": state.get("step", "")}
+    
+    median_distance = sorted(distances)[len(distances) // 2]
+    
+    # 保留高于中位数的片段，最多 8 条
+    filtered = [s for s in segments if isinstance(s, dict) and s.get("distance", 0) >= median_distance][:8]
+    
+    logger.info(f"节点 [7/12] compress_knowledge 完成: {len(segments)} → {len(filtered)} 条")
+    return {
+        "top_k_segment_list": filtered,
+        "step": state.get("step", ""),
+    }
 
 
 async def outline_generate_node(state: AgentState) -> AgentState:
-    """7. 大纲生成：基于模板和知识生成文章大纲"""
+    """大纲生成：基于模板和知识生成文章大纲（动态 prompt 组装）"""
+    from app.prompts.outline_generate import build_outline_prompt
+    
     skill = SkillRegistry.get_skill("outline_generate")
-    result = await skill.execute(state)
-    logger.info("节点 [7/12] outline_generate 完成")
+    
+    # 使用动态 prompt：把 build_outline_prompt 的结果注入 state
+    dynamic_prompt = build_outline_prompt(state if isinstance(state, dict) else {**state})
+    state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
+    
+    result = await skill.execute(state_for_skill)
+    logger.info("节点 [outline_generate] 完成")
     return result
 
 
 async def fusion_generate_node(state: AgentState) -> AgentState:
-    """8. 内容融合：基于大纲和知识生成完整文章"""
+    """内容融合：基于大纲和知识生成完整文章（动态 prompt 组装）"""
+    from app.prompts.fusion_generate import build_fusion_prompt
+    
     skill = SkillRegistry.get_skill("fusion_generate")
-    result = await skill.execute(state)
-    logger.info("节点 [8/12] fusion_generate 完成")
+    
+    # 使用动态 prompt
+    dynamic_prompt = build_fusion_prompt(state if isinstance(state, dict) else {**state})
+    state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
+    
+    result = await skill.execute(state_for_skill)
+    logger.info("节点 [fusion_generate] 完成")
     return result
 
 
 async def fact_check_node(state: AgentState) -> AgentState:
-    """9. 事实核查：验证生成内容的事实准确性
-    
-    注意：此节点与 rule_check 并行执行，只返回核查结果字段避免并发冲突。
-    """
+    """9. 事实核查 + 引用验证"""
     skill = SkillRegistry.get_skill("fact_check")
     result = await skill.execute(state)
     logger.info(f"节点 [9/12] fact_check 完成, is_fact_ok={result.get('is_fact_ok')}")
@@ -141,24 +176,25 @@ async def fact_check_node(state: AgentState) -> AgentState:
 
 
 async def rule_check_node(state: AgentState) -> AgentState:
-    """10. 规则检查：检查must_include/must_not_say
-    
-    注意：此节点与 fact_check 并行执行，只返回 rule_passed 避免并发冲突。
-    """
+    """10. 规则检查：检查must_include/must_not_say"""
     skill = SkillRegistry.get_skill("rule_check")
     result = await skill.execute(state)
     logger.info(f"节点 [10/12] rule_check 完成, rule_passed={result.get('rule_passed')}")
-    return {"rule_passed": result.get("rule_passed")}
+    return {
+        "rule_passed": result.get("rule_passed"),
+        "rule_check_report": result.get("rule_check_report", ""),  # 保存详细报告供 rule_reflect 使用
+    }
 
 
 async def reflect_iterate_node(state: AgentState) -> AgentState:
-    """11. 反思迭代：事实核查失败时的自我修正"""
+    """11. 反思迭代：局部修正模式（只重写出错的句子，保留正确内容）"""
     current_retry = state.get("retry_times", 0)
-    state["retry_times"] = current_retry + 1
+    new_state = {**state}
+    new_state["retry_times"] = current_retry + 1
     
     skill = SkillRegistry.get_skill("reflect_iterate")
-    result = await skill.execute(state)
-    logger.info(f"节点 [11/12] reflect_iterate 完成, 重试次数={state.get('retry_times')}")
+    result = await skill.execute(new_state)
+    logger.info(f"节点 [reflect_iterate] 完成, 重试次数={new_state['retry_times']}")
     return result
 
 
@@ -166,6 +202,64 @@ async def finalize_node(state: AgentState) -> AgentState:
     """12. 完成：整理最终结果"""
     logger.info("节点 [12/12] finalize 完成")
     return {"confirm_draft": True}
+
+
+async def skill_planner_node(state: AgentState) -> AgentState:
+    """Skill 规划：分类文章类型、匹配受众、选择写作技法"""
+    skill = SkillRegistry.get_skill("skill_planner")
+    result = await skill.execute(state)
+    logger.info("节点 [skill_planner] 完成")
+    return result
+
+
+async def outline_validate_node(state: AgentState) -> AgentState:
+    """大纲质量校验：检查结构完整性和 must_include 覆盖"""
+    skill = SkillRegistry.get_skill("outline_validate")
+    result = await skill.execute(state)
+    logger.info(f"节点 [outline_validate] 完成, valid={result.get('outline_valid')}")
+    return {
+        "outline_valid": result.get("outline_valid"),
+        "outline_feedback": result.get("outline_feedback"),
+    }
+
+
+async def outline_regenerate_node(state: AgentState) -> AgentState:
+    """大纲重新生成：带校验反馈重新生成大纲（最多1轮）"""
+    skill = SkillRegistry.get_skill("outline_generate")
+    # 把校验反馈注入 state 让 skill 知道需要改什么
+    feedback = state.get("outline_feedback", "")
+    if feedback:
+        state = {**state, "outline_regeneration_hint": feedback}
+    result = await skill.execute(state)
+    logger.info("节点 [outline_regenerate] 大纲重新生成完成")
+    return result
+
+
+async def style_check_node(state: AgentState) -> AgentState:
+    """文风校验：检查可读性和平台规范合规性"""
+    skill = SkillRegistry.get_skill("style_check")
+    result = await skill.execute(state)
+    logger.info(f"节点 [style_check] 完成, score={result.get('style_score')}")
+    return {
+        "style_score": result.get("style_score"),
+        "style_report": result.get("style_report"),
+    }
+
+
+async def polish_node(state: AgentState) -> AgentState:
+    """文笔润色：打磨过渡、消除重复、统一语气（不改事实）"""
+    skill = SkillRegistry.get_skill("polish")
+    result = await skill.execute(state)
+    logger.info("节点 [polish] 润色完成")
+    return result
+
+
+async def rule_reflect_node(state: AgentState) -> AgentState:
+    """规则修正：补充遗漏的 must_include / 删除 must_not_say 违规"""
+    skill = SkillRegistry.get_skill("rule_reflect")
+    result = await skill.execute(state)
+    logger.info(f"节点 [rule_reflect] 完成, rule_passed={result.get('rule_passed')}")
+    return result
 
 
 def should_parse_intent(state: AgentState) -> str:
@@ -251,3 +345,38 @@ def route_by_entity_type(state: AgentState) -> str:
         return "vaccine_path"
     else:
         return "general_path"
+
+
+def should_validate_outline(state: AgentState) -> str:
+    """大纲校验结果路由"""
+    if state.get("outline_valid") == True:
+        return "outline_ok"
+    else:
+        return "outline_fail"
+
+
+def quality_gate(state: AgentState) -> str:
+    """综合质量门控：根据事实核查、规则检查、文风评分决定下一步"""
+    is_fact_ok = state.get("is_fact_ok", False)
+    rule_passed = state.get("rule_passed", False)
+    style_score = state.get("style_score", 0.8)
+    retry_times = state.get("retry_times", 0)
+    
+    # 重试超过上限，强制结束
+    if retry_times >= 3:
+        return "finalize"
+    
+    # 事实不通过 → 反思修正
+    if not is_fact_ok:
+        return "fact_fail"
+    
+    # 规则不通过 → 规则修正
+    if not rule_passed:
+        return "rule_fail"
+    
+    # 文风评分较低 → 润色
+    if style_score < 0.7:
+        return "polish"
+    
+    # 全部通过 → 完成
+    return "finalize"

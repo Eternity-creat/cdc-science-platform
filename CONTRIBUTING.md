@@ -71,10 +71,11 @@ cdc/
 ├── cdc-agent/app/
 │   ├── api/           # FastAPI 路由
 │   ├── core/          # 核心模块（LLM、配置、嵌入）
-│   ├── skills/        # Skill 实现
-│   │   ├── flow/      # 流程类 Skill
-│   │   └── wiki/      # 知识库类 Skill
-│   ├── prompts/       # Prompt 模板
+│   ├── skills/        # Skill 实现（17 个）
+│   │   ├── flow/      # 流程类 Skill（15 个）
+│   │   ├── wiki/      # 知识库类 Skill（2 个）
+│   │   └── writing/   # 写作知识体系（6 层：索引/规则/蓝图/画像/技法/质量）
+│   ├── prompts/       # Prompt 模板 + 动态组装函数
 │   ├── models/        # 数据模型
 │   ├── tools/         # 工具类
 │   └── workflow/      # LangGraph 工作流
@@ -101,8 +102,11 @@ cdc/
 - 类名：大驼峰（`FactCheckSkill`）
 - 新增 Skill 必须继承 `BaseSkill`，实现 `name`、`metadata`、`execute` 三个成员
 - Skill 的 `execute` 方法不要修改传入的 state，用 `new_state = {**state}` 后返回新 dict
-- Prompt 模板放在 `app/prompts/` 下，每个文件对应一个或一组 Skill
+- 生成类 Skill 应优先读取 `state["_dynamic_prompt"]`（由节点层动态组装），回退到固定模板
+- Prompt 模板放在 `app/prompts/` 下，动态组装函数（如 `build_fusion_prompt`）也放在同一文件中
+- 写作知识文件放在 `app/skills/writing/` 下，按层级组织（blueprints/audiences/techniques/quality）
 - 异步函数优先，使用 `async/await`
+- `skill_loader.py` 依赖 `PyYAML`，新增 YAML 格式的写作知识文件时需同步更新 `skill_index.yaml`
 
 ### React 前端
 

@@ -29,42 +29,60 @@ class RuleCheckSkill(BaseSkill):
         return {
             "description": "检查 must_include/must_not_say 规则",
             "input_fields": ["initial_draft", "wiki_rule"],
-            "output_fields": ["rule_passed"],
+            "output_fields": ["rule_passed", "rule_check_report"],
             "category": "validation"
         }
-    
+
     async def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """执行规则检查（纯函数模式）"""
         new_state = {**state}
-        
+
         draft = state.get("initial_draft", "")
         wiki_rule = state.get("wiki_rule", {})
-        
+
         if not draft:
             logger.warning("RuleCheckSkill: 未提供初稿内容")
             new_state["rule_passed"] = True
+            new_state["rule_check_report"] = ""
             return new_state
-        
+
         must_include = wiki_rule.get("must_include", []) if wiki_rule else []
         must_not_say = wiki_rule.get("must_not_say", []) if wiki_rule else []
-        
+
         prompt = RULE_CHECK_PROMPT.format(
             article_content=draft,
             must_include=", ".join(must_include) if must_include else "无",
             must_not_say=", ".join(must_not_say) if must_not_say else "无"
         )
-        
+
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages)
-        
+
         try:
             cleaned = extract_json(response)
             result = json.loads(cleaned)
-            new_state["rule_passed"] = result.get("rule_passed", True)
-            logger.info(f"RuleCheckSkill: 规则校验 rule_passed={new_state['rule_passed']}")
+            rule_passed = result.get("rule_passed", True)
+            missing_points = result.get("missing_points", [])
+            violated_rules = result.get("violated_rules", [])
+
+            new_state["rule_passed"] = rule_passed
+
+            # 构建详细报告供 rule_reflect 消费
+            report = {
+                "rule_passed": rule_passed,
+                "missing_points": missing_points,
+                "violated_rules": violated_rules,
+            }
+            new_state["rule_check_report"] = json.dumps(report, ensure_ascii=False)
+
+            logger.info(
+                f"RuleCheckSkill: 规则校验 rule_passed={rule_passed}, "
+                f"missing={len(missing_points)}, violated={len(violated_rules)}"
+            )
         except json.JSONDecodeError as e:
             logger.error(f"RuleCheckSkill: JSON解析失败 {e}")
             logger.debug(f"RuleCheckSkill: 原始返回内容: {response[:200]}")
             new_state["rule_passed"] = True
-        
+            new_state["rule_check_report"] = ""
+
         return new_state

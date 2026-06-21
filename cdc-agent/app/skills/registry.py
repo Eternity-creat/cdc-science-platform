@@ -11,6 +11,11 @@ from app.skills.flow.rule_check_skill import RuleCheckSkill
 from app.skills.flow.reflect_skill import ReflectIterateSkill
 from app.skills.flow.section_analyze_skill import SectionAnalyzeSkill
 from app.skills.flow.image_generate_skill import ImageGenerateSkill
+from app.skills.flow.skill_planner_skill import SkillPlannerSkill
+from app.skills.flow.outline_validate_skill import OutlineValidateSkill
+from app.skills.flow.style_check_skill import StyleCheckSkill
+from app.skills.flow.polish_skill import PolishSkill
+from app.skills.flow.rule_reflect_skill import RuleReflectSkill
 from app.skills.wiki.entity_fetch_skill import EntityFetchSkill
 from app.skills.wiki.relation_fetch_skill import RelationFetchSkill
 
@@ -75,7 +80,16 @@ class SkillRegistry:
         # 配图生成
         cls.register(SectionAnalyzeSkill())      # 11. 段落分析（识别需要配图的段落）
         cls.register(ImageGenerateSkill())       # 12. 配图生成（SenseNova U1 Lite）
-        
+
+        # 写作技能规划
+        cls.register(SkillPlannerSkill())      # 13. 文章类型分类 + Skill 规划
+
+        # 质量增强
+        cls.register(OutlineValidateSkill())   # 14. 大纲质量校验
+        cls.register(StyleCheckSkill())        # 15. 文风/可读性校验
+        cls.register(PolishSkill())            # 16. 文笔润色
+        cls.register(RuleReflectSkill())       # 17. 规则修正
+
         cls._initialized = True
     
     @classmethod

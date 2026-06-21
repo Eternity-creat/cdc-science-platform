@@ -459,7 +459,8 @@ step 可选 `outline`（大纲）或 `draft`（正文）。
     "fact_check_passed": true,
     "rule_check_passed": true,
     "retry_count": 0,
-    "quality_score": 0.95
+    "quality_score": 0.95,
+    "style_score": 0.88
   },
   "trace": [
     { "step": "intent_parse", "duration_ms": 1200 },

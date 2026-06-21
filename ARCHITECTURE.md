@@ -40,7 +40,7 @@
 
 **Backend（Spring Boot）** 是业务逻辑中枢，提供 60 个 REST 端点。负责文章全生命周期管理（创建、编辑、确认、删除）、知识库 CRUD（实体、片段、规则、关系）、模板管理、LLM 配置管理、修改历史追踪和 Agent 执行追踪。所有数据持久化通过 MyBatis 操作 MySQL。
 
-**Agent（FastAPI + LangGraph）** 是 AI 生成引擎，提供 6 个端点。负责意图解析、向量检索、大纲生成、正文生成、事实核查、规则校验、反思迭代和图片生成。核心是一个 LangGraph 状态机，编排 12 个 Skill 节点构成生成流水线。
+**Agent（FastAPI + LangGraph）** 是 AI 生成引擎，提供 6 个端点。负责意图解析、向量检索、写作技法规划、大纲生成与校验、正文生成、三路并行质量检查（事实核查 + 规则校验 + 文风评估）、反思迭代、规则修正、文笔润色和图片生成。核心是一个 LangGraph 状态机，编排 17 个 Skill 节点构成生成流水线，并集成了 6 层渐进式披露的写作知识体系。
 
 ### 服务间通信
 
@@ -78,6 +78,11 @@ __start__
                           │                       │
                           └───────┬───────────────┘
                                   │
+                                  ▼
+                        SkillPlannerSkill
+                     （文章类型分类 + 受众匹配
+                       + 技法选择 + 知识预加载）
+                                  │
                     ┌─────────────┼─────────────┐
                     ▼                           ▼
             segment_filter              template_load
@@ -89,8 +94,18 @@ __start__
                                   │
                                   ▼
                         OutlineGenerateSkill
+                    （动态 prompt + Skill 知识注入）
                                   │
-                               [END]
+                                  ▼
+                        OutlineValidateSkill
+                         （大纲结构校验）
+                                  │
+                       ┌──[通过]──┴──[不通过]──┐
+                       ▼                       ▼
+                    [END]            OutlineRegenerateSkill
+                                            │
+                                            ▼
+                                       [END]
 ```
 
 ### 正文工作流（draft_workflow）
@@ -101,22 +116,40 @@ __start__
 OutlineGenerateSkill 完成
           │
           ▼
-  FusionGenerateSkill（融合生成正文）
+  OutlineValidateSkill（大纲校验）
           │
-    ┌─────┼─────┐
-    ▼           ▼
-FactCheck    RuleCheck
-（事实核查）  （规则校验）
-    │           │
-    └─────┬─────┘
-          │
-    ┌─[全部通过]─→ finalize → [END]
-    │
-    └─[核查失败]─→ ReflectIterateSkill（反思修正）
-                        │
-                  retry < 3?
-                  ├─ 是 → 回到 FusionGenerateSkill
-                  └─ 否 → finalize → [END]
+  ┌──[通过]──┴──[不通过]──┐
+  │                       │
+  ▼                       ▼
+FusionGenerateSkill    OutlineRegenerateSkill
+（动态 prompt 生成）       │
+  │                     [END]
+  │
+  ├────────────┬────────────┐
+  ▼            ▼            ▼
+FactCheck   RuleCheck   StyleCheck
+（事实核查） （规则校验） （文风评估）
+  │            │            │
+  └────────────┴────────────┘
+               │
+         QualityGate（统一路由）
+               │
+  ┌──[全部通过]──────────┐
+  │                       │
+  ▼                       ▼
+PolishSkill         ┌─[事实失败]─→ ReflectIterateSkill
+（文笔润色）        │                    │
+  │                 │              retry < 3?
+  ▼                 │              ├─ 是 → 回到 FusionGenerate
+finalize            │              └─ 否 → finalize → [END]
+  │                 │
+[END]               ├─[规则失败]─→ RuleReflectSkill
+                    │              （补充缺失要点/删除违规表述）
+                    │                    │
+                    │                    ▼
+                    │              回到 FusionGenerate
+                    │
+                    └─[重试超限]─→ finalize → [END]
 ```
 
 ### 条件路由
@@ -125,7 +158,8 @@ FactCheck    RuleCheck
 |----------|----------|
 | `should_parse_intent` | `mode == 1` 且 `user_text` 为空 → 跳过意图解析（表单模式）；否则执行意图解析（文本模式） |
 | `route_by_entity_type` | `disease/epidemic/1` → 疫情路径；`vaccine/drug/2` → 疫苗路径；其他 → 通用路径 |
-| `check_fact_result` | `is_fact_ok == true` → 通过；`retry_times >= 3` → 强制结束；否则 → 反思迭代 |
+| `should_validate_outline` | `outline_valid == true` → 大纲通过；否则 → 大纲重新生成 |
+| `quality_gate` | 三路并行校验后统一路由：`is_fact_ok && rule_passed` → 进入润色（polish）；`retry_times >= 3` → 强制结束（finalize）；事实失败 → 反思迭代（reflect）；规则失败 → 规则修正（rule_reflect） |
 
 ## Skill 系统
 
@@ -134,6 +168,12 @@ FactCheck    RuleCheck
 所有 Skill 继承 `BaseSkill` 抽象类，遵循四个原则：单一职责（每个 Skill 只做一件事）、纯函数（不修改输入 state，返回新 state）、标准化 I/O（统一的 `Dict[str, Any]` 状态包）、独立可测（每个 Skill 可单独运行测试）。
 
 ### Skill 清单
+
+**规划类（planning）：**
+
+| Skill | 功能 | 调用 LLM |
+|-------|------|----------|
+| `SkillPlannerSkill` | 分类文章类型、匹配受众画像、选择写作技法、预加载 Layer 2-5 知识 | 是 |
 
 **解析类（parsing）：**
 
@@ -155,27 +195,108 @@ FactCheck    RuleCheck
 
 | Skill | 功能 | 调用 LLM |
 |-------|------|----------|
-| `OutlineGenerateSkill` | 基于模板 + 知识片段 + 规则生成文章大纲 | 是 |
-| `FusionGenerateSkill` | 融合大纲、知识、规则生成完整正文，带 `{ref:N}` 引用标记 | 是 |
+| `OutlineGenerateSkill` | 基于模板 + 知识片段 + 规则 + Skill 知识生成文章大纲（动态 prompt） | 是 |
+| `FusionGenerateSkill` | 融合大纲、知识、规则、Skill 知识生成完整正文，带 `{ref:N}` 引用标记（动态 prompt） | 是 |
 
 **校验类（validation）：**
 
 | Skill | 功能 | 调用 LLM |
 |-------|------|----------|
-| `FactCheckSkill` | 逐句比对权威知识片段，验证事实准确性 | 是 |
-| `RuleCheckSkill` | 校验 must_include 覆盖和 must_not_say 规避 | 是 |
+| `OutlineValidateSkill` | 校验大纲结构完整性、must_include 覆盖、蓝图必需章节 | 是 |
+| `FactCheckSkill` | 逐句比对权威知识片段，验证事实准确性和引用标注 | 是 |
+| `RuleCheckSkill` | 校验 must_include 覆盖和 must_not_say 规避，输出详细报告 | 是 |
+| `StyleCheckSkill` | 评估可读性（句长、被动语态、专业术语密度等 6 维），输出 style_score | 是 |
 
 **迭代类（iteration）：**
 
 | Skill | 功能 | 调用 LLM |
 |-------|------|----------|
-| `ReflectIterateSkill` | 根据核查报告重写错误句子，最多重试 3 次 | 是 |
+| `ReflectIterateSkill` | 根据事实核查报告局部修正错误句子，保留 `{ref:N}` 标注，最多重试 3 次 | 是 |
+| `RuleReflectSkill` | 根据规则检查报告补充缺失要点、删除违规表述 | 是 |
+
+**润色类（polish）：**
+
+| Skill | 功能 | 调用 LLM |
+|-------|------|----------|
+| `PolishSkill` | 平滑过渡、消除冗余、统一语气，保留事实和 `{ref:N}` 标注 | 是 |
 
 **图片类（image）：**
 
 | Skill | 功能 | 调用 LLM |
 |-------|------|----------|
 | `ImageGenerateSkill` | 调用多模态 API 生成配图并下载到本地 | 是（图片模型） |
+
+## 写作知识体系（Writing Skill System）
+
+Agent 集成了 6 层渐进式披露的写作知识体系，由 `SkillPlannerSkill` 和 `SkillLoader` 协作实现。LLM 在生成大纲和正文时，不再使用固定的 prompt 模板，而是根据文章类型、受众和技法动态注入对应层级的写作知识。
+
+### 层级结构
+
+```
+Layer 0: skill_index.yaml（元索引）
+  │  列出所有文章类型、受众画像、技法卡片的代码和文件路径
+  │
+Layer 1: universal_rules.md（通用规则，始终加载）
+  │  CDC 科普文基线规范、微信平台规范、安全红线、引用标准
+  │
+Layer 2: blueprints/{type}.md（文章类型蓝图，按类型加载）
+  │  6 种类型：disease_explainer / vaccine_guide / outbreak_alert
+  │           myth_buster / seasonal_health / case_story
+  │
+Layer 3: audiences/{audience}.md（受众画像，按受众加载）
+  │  5 种受众：general_public / parents / elderly / students / healthcare_workers
+  │
+Layer 4: techniques/{code}.md（技法卡片，按选择批量加载）
+  │  8 种技法：hook_opening / data_presentation / analogy_explanation
+  │           myth_bust_pattern / cta_closing / emotion_writing / faq_pattern / wechat_formatting
+  │
+Layer 5: quality/{type}.md（质量基准，按类型加载）
+     40 分制评分细则，供 StyleCheckSkill 和 QualityGate 参考
+```
+
+### 工作机制
+
+`SkillPlannerSkill` 将 Layer 0 索引中的类型描述、受众列表和技法列表构建为 prompt，由 LLM 自动分类文章类型、匹配受众、选择最多 5 个技法。分类结果经验证后，`SkillLoader` 预加载 Layer 2-5 对应文件内容并缓存到 `state["skill_plan"]` 中。
+
+后续 `OutlineGenerateSkill` 和 `FusionGenerateSkill` 通过 `build_outline_prompt(state)` 和 `build_fusion_prompt(state)` 动态组装 prompt，将 Layer 1-4 的知识内容注入到 LLM 调用中。语气以 `template_tone` 为基底，结合受众画像做微调。
+
+### 目录结构
+
+```
+app/skills/writing/
+├── skill_index.yaml          # Layer 0: 元索引
+├── universal_rules.md        # Layer 1: 通用规则
+├── blueprints/               # Layer 2: 文章类型蓝图
+│   ├── disease_explainer.md
+│   ├── vaccine_guide.md
+│   ├── outbreak_alert.md
+│   ├── myth_buster.md
+│   ├── seasonal_health.md
+│   └── case_story.md
+├── audiences/                # Layer 3: 受众画像
+│   ├── general_public.md
+│   ├── parents.md
+│   ├── elderly.md
+│   ├── students.md
+│   └── healthcare_workers.md
+├── techniques/               # Layer 4: 技法卡片
+│   ├── hook_opening.md
+│   ├── data_presentation.md
+│   ├── analogy_explanation.md
+│   ├── myth_bust_pattern.md
+│   ├── cta_closing.md
+│   ├── emotion_writing.md
+│   ├── faq_pattern.md
+│   └── wechat_formatting.md
+├── quality/                  # Layer 5: 质量基准
+│   ├── disease_explainer.md
+│   ├── vaccine_guide.md
+│   ├── outbreak_alert.md
+│   ├── myth_buster.md
+│   ├── seasonal_health.md
+│   └── case_story.md
+└── skill_loader.py           # 单例加载器，按层级读取并缓存
+```
 
 ## LLM 多模型池
 

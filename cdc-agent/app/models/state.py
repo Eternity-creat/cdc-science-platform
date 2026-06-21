@@ -219,6 +219,24 @@ class AgentState(BaseModel):
     flow_trace: Optional[List[TraceStep]] = None
     token_usage: TokenUsage = Field(default_factory=TokenUsage)
 
+    # -- Skill 规划 (Writing Skill System) ---------------------------------
+    skill_plan: Optional[dict] = None
+    # skill_plan structure: {article_type, article_type_reason, audience, audience_reason,
+    #   techniques, technique_plan, special_notes, blueprint_content,
+    #   audience_content, techniques_content, quality_benchmark}
+
+    # -- 质量评分 ----------------------------------------------------------
+    style_score: Optional[float] = None       # 文风/可读性评分 (0-1)
+    quality_score: Optional[float] = None     # 综合质量分 (0-1)
+    style_report: Optional[str] = None        # 文风检查报告
+
+    # -- 大纲校验 ----------------------------------------------------------
+    outline_valid: Optional[bool] = None      # 大纲是否通过校验
+    outline_feedback: Optional[str] = None    # 大纲校验反馈
+
+    # -- 规则修正 ----------------------------------------------------------
+    rule_check_report: Optional[str] = None   # 规则检查详细报告 JSON
+
     # -- Allow extra fields for forward-compat with agent.py builders ------
     model_config = {"extra": "allow"}
 

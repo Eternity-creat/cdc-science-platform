@@ -18,6 +18,9 @@ httpx==0.27.2
 # JSON处理
 orjson==3.10.7
 
+# YAML处理（Skill知识文件加载）
+PyYAML>=6.0
+
 # 日志
 loguru==0.7.2
 

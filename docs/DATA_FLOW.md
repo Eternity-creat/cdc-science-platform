@@ -147,7 +147,17 @@ vaccine_preprocess 注入疫苗领域规则：
 - `must_include` 追加 "接种建议或注意事项"
 - `must_not_say` 追加 "绝对安全"、"没有任何副作用"
 
-### 4.5 知识检索节点（并行）
+### 4.5 写作技法规划节点
+
+`SkillPlannerSkill` 根据实体类型、用户输入等信息，通过 LLM 自动规划写作方案：
+
+1. 从 `skill_index.yaml` 读取可用的文章类型、受众画像和技法列表
+2. 构建 prompt 让 LLM 选择最匹配的文章类型（如 `vaccine_guide`）、受众画像（如 `general_public`）和最多 5 个写作技法
+3. 验证分类结果的有效性，无效时降级为默认值
+4. 通过 `SkillLoader` 预加载 Layer 2-5 的写作知识内容（蓝图、画像、技法卡片、质量基准）
+5. 将完整的 `skill_plan`（含预加载内容）写入 state
+
+### 4.6 知识检索节点（并行）
 
 两个节点并行执行：
 
@@ -159,13 +169,13 @@ vaccine_preprocess 注入疫苗领域规则：
 
 **template_load 节点：** `TemplateExtractSkill` 规范化模板元数据。
 
-### 4.6 知识压缩节点
+### 4.7 知识压缩节点
 
-`CompressSkill`（semantic 模式）压缩检索到的知识片段，去除冗余内容，减少后续 LLM 调用的 token 消耗。
+`CompressSkill`（semantic 模式）对检索到的知识片段做中位数距离过滤，保留距离 ≥ 中位数的片段（最多 8 条），去除冗余内容，减少后续 LLM 调用的 token 消耗。
 
-### 4.7 大纲生成节点
+### 4.8 大纲生成节点
 
-`OutlineGenerateSkill` 构建 Prompt 并调用 LLM：
+`OutlineGenerateSkill` 通过 `build_outline_prompt(state)` 动态组装 Prompt，注入 Layer 1-3 写作知识（通用规则 + 文章类型蓝图 + 受众画像），并调用 LLM：
 
 ```
 角色：你是疾控中心的健康科普专家。
@@ -196,6 +206,17 @@ vaccine_preprocess 注入疫苗领域规则：
 ```
 
 LLM 返回后，将大纲内容写入 state 的 `article_outline` 字段。
+
+### 4.9 大纲校验节点
+
+`OutlineValidateSkill` 通过 LLM 对生成的大纲进行质量校验：
+
+1. 检查大纲是否覆盖所有 `must_include` 要点
+2. 验证蓝图（blueprint）中定义的必需章节是否齐全
+3. 评估章节的逻辑顺序是否合理
+4. 输出 `outline_valid`（布尔值）和 `outline_feedback`（详细反馈）
+
+如果校验不通过，`OutlineRegenerateSkill` 会根据反馈重新生成大纲。
 
 ## 第五步：结果回传
 
@@ -232,26 +253,49 @@ Agent 将执行结果打包为 `AgentResponse` 返回给 Java 后端：
 用户确认大纲后点击「生成正文」，流程类似但走 **draft_workflow**：
 
 ```
-大纲 → FusionGenerateSkill（融合生成）
-         │
-   ┌─────┼─────┐
-   ▼           ▼
-FactCheck    RuleCheck
-   │           │
-   └─────┬─────┘
-         │
-    [通过] → 返回正文
-    [不通过] → ReflectIterateSkill → 重新生成（最多3轮）
+大纲通过校验 → FusionGenerateSkill（动态 prompt 融合生成）
+                   │
+         ┌─────────┼─────────┐
+         ▼         ▼         ▼
+     FactCheck  RuleCheck  StyleCheck
+     （事实核查）（规则校验）（文风评估）
+         │         │         │
+         └─────────┴─────────┘
+                   │
+            QualityGate（统一路由）
+                   │
+      ┌──[全部通过]──────────┐
+      │                       │
+      ▼                       ▼
+  PolishSkill            事实失败 → ReflectIterateSkill → 重新生成
+  （文笔润色）           规则失败 → RuleReflectSkill → 重新生成
+      │                  重试超限 → 强制结束
+      ▼
+   finalize → 返回正文
 ```
 
-正文生成的 Prompt 要求 LLM：
-- 按大纲结构展开
+正文生成的 Prompt 通过 `build_fusion_prompt(state)` 动态组装，注入 Layer 1-4 写作知识：
+- Layer 1 通用写作规范（始终注入）
+- Layer 2 文章类型蓝图（按 SkillPlanner 分类的类型注入）
+- Layer 3 受众画像（按匹配的受众注入）
+- Layer 4 写作技法指引（按选择的技法批量注入）
+- `template_tone` 作为语气基底，结合受众画像微调
 - 引用权威知识片段并插入 `{ref:N}` 标记
 - 覆盖所有 must_include 知识点
 - 避免 must_not_say 表述
 - 控制在指定字数左右
 
-事实核查（FactCheckSkill）逐句比对正文与权威知识片段，标记不一致的句子。如果不通过，反思迭代（ReflectIterateSkill）只重写错误句子，保留正确部分。
+三路并行质量检查：
+
+**FactCheckSkill** 逐句比对正文与权威知识片段，标记不一致的句子，同时验证 `{ref:N}` 引用标注的准确性。
+
+**RuleCheckSkill** 校验 must_include 覆盖和 must_not_say 规避，输出详细的 `rule_check_report`（JSON 格式含 missing_points 和 violated_rules）。
+
+**StyleCheckSkill** 评估可读性 6 维指标：平均句长、被动语态比例、专业术语密度、段落长度、标题层级、过渡词使用，输出 `style_score`（0-1）。
+
+`quality_gate` 统一路由函数读取三路检查结果，决策下一步：全部通过进入文笔润色（PolishSkill），事实失败进入反思迭代（ReflectIterateSkill，只重写错误句子，保留 `{ref:N}` 标注），规则失败进入规则修正（RuleReflectSkill，补充缺失要点 / 删除违规表述），重试超过 3 次则强制结束。
+
+**PolishSkill** 在质量门控通过后执行文笔润色：平滑段落过渡、消除重复表述、统一全文语气，同时严格保留事实准确性和 `{ref:N}` 引用标注。
 
 ## 第七步：编辑与确认
 

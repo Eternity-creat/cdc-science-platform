@@ -1,6 +1,147 @@
-# v1.1.0 服务器更新部署指南
+# 服务器更新部署指南
 
-本文档描述如何将 CDC 科普文章生成平台从 v1.0.0 升级到 v1.1.0。
+本文档记录每个版本的升级部署步骤。按版本从新到旧排列，找到你当前要升级到的版本章节即可。
+
+---
+
+# v1.2.0 部署指南（写作知识体系 + 质量增强）
+
+## 更新概述
+
+v1.2.0 新增了 6 层渐进式披露的写作知识体系和多个质量增强节点。**改动全部集中在 Agent（Python FastAPI）**，不涉及 Backend、Frontend、数据库和 Nginx。
+
+- **Agent（Python FastAPI）**：新增 5 个 Skill（SkillPlanner / OutlineValidate / StyleCheck / Polish / RuleReflect）、6 层写作知识文件（26 个 .md + 1 个 .yaml）、动态 prompt 组装、三路并行质量检查、compress_knowledge 修复、requirements.txt 新增 PyYAML 依赖
+- **Backend / Frontend / MySQL / Nginx**：无变更
+
+## 前置检查
+
+1. 服务器上已部署 v1.0.0 或 v1.1.0 且各服务正常运行
+2. v1.2.0 的代码已推送到服务器
+3. Docker 和 Docker Compose V2 可用
+
+## 部署步骤
+
+### 1. 更新 Agent 代码
+
+因为本次新增了大量文件（26 个写作知识文件 + 5 个新 Skill + 多个修改文件），建议整个 `cdc-agent/` 目录覆盖，而不是逐文件比对：
+
+```bash
+cd /path/to/cdc-agent-project/cdc
+
+# git 管理
+git pull origin main
+
+# 非 git 管理：直接将整个 cdc-agent/ 目录上传覆盖
+```
+
+### 2. 重建 Agent 服务
+
+只需重建 agent，其他服务不受影响：
+
+```bash
+cd deploy
+docker compose up -d --build agent
+```
+
+`--build` 是必须的，因为 `requirements.txt` 新增了 `PyYAML>=6.0` 依赖，需要重新构建镜像来安装。
+
+### 3. 确认服务状态
+
+```bash
+docker compose ps
+```
+
+确认 `cdc-agent` 状态为 healthy。
+
+### 4. 验证
+
+```bash
+# 健康检查
+curl http://localhost:8001/health
+
+# 触发一次完整的文章生成流程（通过前端或 API），观察 Agent 日志：
+docker compose logs -f agent
+```
+
+日志中应能看到新增节点的执行记录：`skill_planner`、`outline_validate`、`style_check`、`polish` 等。
+
+### 5. 回滚方案
+
+```bash
+git checkout v1.1.0  # 或对应的 tag/commit
+cd deploy
+docker compose up -d --build agent
+```
+
+无数据库变更，回滚只需重建 agent。
+
+## 附录：v1.2.0 变更文件清单
+
+全部在 `cdc-agent/` 内，建议整目录覆盖。如需逐文件更新，以下是完整清单：
+
+### 新增文件
+
+```
+# 写作知识体系（26 个文件）
+app/skills/writing/__init__.py
+app/skills/writing/skill_index.yaml
+app/skills/writing/universal_rules.md
+app/skills/writing/skill_loader.py
+app/skills/writing/blueprints/disease_explainer.md
+app/skills/writing/blueprints/vaccine_guide.md
+app/skills/writing/blueprints/outbreak_alert.md
+app/skills/writing/blueprints/myth_buster.md
+app/skills/writing/blueprints/seasonal_health.md
+app/skills/writing/blueprints/case_story.md
+app/skills/writing/audiences/general_public.md
+app/skills/writing/audiences/parents.md
+app/skills/writing/audiences/elderly.md
+app/skills/writing/audiences/students.md
+app/skills/writing/audiences/healthcare_workers.md
+app/skills/writing/techniques/hook_opening.md
+app/skills/writing/techniques/data_presentation.md
+app/skills/writing/techniques/analogy_explanation.md
+app/skills/writing/techniques/myth_bust_pattern.md
+app/skills/writing/techniques/cta_closing.md
+app/skills/writing/techniques/emotion_writing.md
+app/skills/writing/techniques/faq_pattern.md
+app/skills/writing/techniques/wechat_formatting.md
+app/skills/writing/quality/disease_explainer.md
+app/skills/writing/quality/vaccine_guide.md
+app/skills/writing/quality/outbreak_alert.md
+app/skills/writing/quality/myth_buster.md
+app/skills/writing/quality/seasonal_health.md
+app/skills/writing/quality/case_story.md
+
+# 新 Skill（5 个）
+app/skills/flow/skill_planner_skill.py
+app/skills/flow/outline_validate_skill.py
+app/skills/flow/style_check_skill.py
+app/skills/flow/polish_skill.py
+app/skills/flow/rule_reflect_skill.py
+```
+
+### 修改文件
+
+```
+app/models/state.py
+app/skills/registry.py
+app/workflow/nodes.py
+app/workflow/graph.py
+app/skills/flow/outline_skill.py
+app/skills/flow/fusion_skill.py
+app/skills/flow/rule_check_skill.py
+app/skills/flow/reflect_skill.py
+app/prompts/fusion_generate.py
+app/prompts/outline_generate.py
+app/prompts/reflect_iterate.py
+app/prompts/fact_check.py
+requirements.txt
+```
+
+---
+
+# v1.1.0 部署指南（Bug 修复 + 前端优化）
 
 ## 更新概述
 
