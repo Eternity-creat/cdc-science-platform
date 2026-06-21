@@ -39,13 +39,26 @@ class FactCheckSkill(BaseSkill):
         
         draft = state.get("initial_draft", "")
         segments = state.get("top_k_segment_list", [])
-        
+        wiki_segments = state.get("wiki_segments", [])
+
         if not draft:
             logger.warning("FactCheckSkill: 未提供初稿内容")
             new_state["is_fact_ok"] = True
             return new_state
-        
-        segment_content = "\n".join([f"- {s.get('content', '')}" for s in segments])
+
+        # 限制片段数量，兼容 dict 和 WikiSegment
+        if wiki_segments:
+            segment_content = "\n".join([
+                f"- {s.get('content', s) if hasattr(s, 'get') else s}"
+                for s in wiki_segments[:10]
+            ])
+        elif segments:
+            segment_content = "\n".join([
+                f"- {s.get('content', '') if hasattr(s, 'get') else s}"
+                for s in segments[:10]
+            ])
+        else:
+            segment_content = ""
         
         prompt = FACT_CHECK_PROMPT.format(
             article_content=draft,

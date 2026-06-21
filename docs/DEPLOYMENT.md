@@ -4,6 +4,50 @@
 
 ---
 
+# v1.2.1 部署指南（LLM 超时热修复）
+
+## 更新概述
+
+v1.2.1 修复了 v1.2.0 部署后 LLM 调用超时的问题。根因是 `compress_knowledge` 在无距离信息时跳过压缩导致全量知识片段灌入 prompt、fusion prompt 未限制知识片段数量、httpx read timeout 仅 180s。**仅涉及 Agent（Python FastAPI）**，不涉及其他服务。
+
+- **Agent**：3 个文件修改（`nodes.py`、`fusion_generate.py`、`llm.py`）+ 1 个文件修改（`llm_pool.py`，ConfigManager TTL 缓存）
+- **Backend / Frontend / MySQL / Nginx**：无变更
+
+## 部署步骤
+
+```bash
+# 1. 更新 Agent 代码（git 或手动覆盖均可）
+cd /path/to/cdc-agent-project/cdc
+git pull origin main
+
+# 2. 重建 Agent
+cd deploy
+docker compose up -d --build agent
+
+# 3. 确认状态
+docker compose ps
+docker compose logs -f agent
+```
+
+## 变更文件清单
+
+```
+app/workflow/nodes.py        ← compress_knowledge 截断修复
+app/prompts/fusion_generate.py ← 知识片段数量限制
+app/core/llm.py              ← httpx timeout 180s → 300s
+app/core/llm_pool.py         ← ConfigManager 60s TTL + 配置变更检测
+```
+
+## 回滚
+
+```bash
+git checkout v1.2.0
+cd deploy
+docker compose up -d --build agent
+```
+
+---
+
 # v1.2.0 部署指南（写作知识体系 + 质量增强）
 
 ## 更新概述

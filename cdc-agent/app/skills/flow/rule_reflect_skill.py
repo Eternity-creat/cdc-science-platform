@@ -71,8 +71,8 @@ class RuleReflectSkill(BaseSkill):
         segment_content = ""
         if segments:
             segment_lines = []
-            for i, s in enumerate(segments, 1):
-                content = s.get("content", "") if isinstance(s, dict) else str(s)
+            for i, s in enumerate(segments[:10], 1):
+                content = s.get("content", "") if hasattr(s, 'get') else str(s)
                 segment_lines.append(f"[片段{i}] {content}")
             segment_content = "\n".join(segment_lines)
 

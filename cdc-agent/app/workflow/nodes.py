@@ -117,15 +117,22 @@ async def compress_knowledge_node(state: AgentState) -> AgentState:
         return {"step": state.get("step", "")}
     
     # 按 distance 分数过滤（高分为更相关）
-    distances = [s.get("distance", 0) for s in segments if isinstance(s, dict)]
+    # top_k_segment_list 可能是 dict 或 WikiSegment（Pydantic），两者都支持 .get()
+    valid_segments = [s for s in segments if hasattr(s, 'get')]
+    distances = [s.get("distance", 0) for s in valid_segments]
     if not distances:
-        logger.info("节点 [7/12] compress_knowledge 跳过（无距离信息）")
-        return {"step": state.get("step", "")}
+        # 无距离信息时截断到前 8 条，避免全量灌入 prompt 导致 LLM 超时
+        truncated = valid_segments[:8]
+        logger.info(f"节点 [7/12] compress_knowledge 截断（无距离信息）: {len(segments)} → {len(truncated)} 条")
+        return {
+            "top_k_segment_list": truncated,
+            "step": state.get("step", ""),
+        }
     
     median_distance = sorted(distances)[len(distances) // 2]
     
     # 保留高于中位数的片段，最多 8 条
-    filtered = [s for s in segments if isinstance(s, dict) and s.get("distance", 0) >= median_distance][:8]
+    filtered = [s for s in valid_segments if s.get("distance", 0) >= median_distance][:8]
     
     logger.info(f"节点 [7/12] compress_knowledge 完成: {len(segments)} → {len(filtered)} 条")
     return {
@@ -137,13 +144,14 @@ async def compress_knowledge_node(state: AgentState) -> AgentState:
 async def outline_generate_node(state: AgentState) -> AgentState:
     """大纲生成：基于模板和知识生成文章大纲（动态 prompt 组装）"""
     from app.prompts.outline_generate import build_outline_prompt
-    
+
     skill = SkillRegistry.get_skill("outline_generate")
-    
+
     # 使用动态 prompt：把 build_outline_prompt 的结果注入 state
     dynamic_prompt = build_outline_prompt(state if isinstance(state, dict) else {**state})
+    logger.info(f"节点 [outline_generate] prompt 长度: {len(dynamic_prompt)} 字符")
     state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
-    
+
     result = await skill.execute(state_for_skill)
     logger.info("节点 [outline_generate] 完成")
     return result
@@ -152,13 +160,14 @@ async def outline_generate_node(state: AgentState) -> AgentState:
 async def fusion_generate_node(state: AgentState) -> AgentState:
     """内容融合：基于大纲和知识生成完整文章（动态 prompt 组装）"""
     from app.prompts.fusion_generate import build_fusion_prompt
-    
+
     skill = SkillRegistry.get_skill("fusion_generate")
-    
+
     # 使用动态 prompt
     dynamic_prompt = build_fusion_prompt(state if isinstance(state, dict) else {**state})
+    logger.info(f"节点 [fusion_generate] prompt 长度: {len(dynamic_prompt)} 字符")
     state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
-    
+
     result = await skill.execute(state_for_skill)
     logger.info("节点 [fusion_generate] 完成")
     return result
@@ -224,14 +233,17 @@ async def outline_validate_node(state: AgentState) -> AgentState:
 
 
 async def outline_regenerate_node(state: AgentState) -> AgentState:
-    """大纲重新生成：带校验反馈重新生成大纲（最多1轮）"""
+    """大纲重新生成：带校验反馈重新生成大纲（最多 2 轮）"""
     skill = SkillRegistry.get_skill("outline_generate")
     # 把校验反馈注入 state 让 skill 知道需要改什么
     feedback = state.get("outline_feedback", "")
+    retry_count = state.get("outline_retry_count", 0) + 1
     if feedback:
         state = {**state, "outline_regeneration_hint": feedback}
     result = await skill.execute(state)
-    logger.info("节点 [outline_regenerate] 大纲重新生成完成")
+    # 确保 retry_count 传递到下游 state
+    result["outline_retry_count"] = retry_count
+    logger.info(f"节点 [outline_regenerate] 大纲重新生成完成 (第{retry_count}次重试)")
     return result
 
 
@@ -348,31 +360,54 @@ def route_by_entity_type(state: AgentState) -> str:
 
 
 def should_validate_outline(state: AgentState) -> str:
-    """大纲校验结果路由"""
+    """大纲校验结果路由：最多重新生成 2 次，超过则强制通过"""
     if state.get("outline_valid") == True:
         return "outline_ok"
-    else:
-        return "outline_fail"
+    
+    retry_count = state.get("outline_retry_count", 0)
+    if retry_count >= 2:
+        logger.warning(f"大纲校验连续 {retry_count} 次未通过，强制通过以继续流程")
+        return "outline_ok"
+    
+    return "outline_fail"
+
+
+def should_generate_outline(state: AgentState) -> str:
+    """判断是否需要生成大纲：已有大纲则跳过，直接生成正文"""
+    existing_outline = state.get("article_outline", "")
+    if existing_outline and existing_outline.strip():
+        logger.info("已有大纲，跳过大纲生成/校验，直接进入正文生成")
+        return "skip_to_fusion"
+    return "generate_outline"
 
 
 def quality_gate(state: AgentState) -> str:
-    """综合质量门控：根据事实核查、规则检查、文风评分决定下一步"""
+    """综合质量门控：根据事实核查、规则检查、文风评分决定下一步
+
+    路由优先级：
+    1. 重试超限 → 强制结束
+    2. 规则不通过 → 先修规则（rule_reflect 只改文本不重新生成，更快）
+    3. 事实不通过 → 反思修正 + 重新生成
+    4. 文风低 → 润色
+    5. 全通过 → 完成
+    """
     is_fact_ok = state.get("is_fact_ok", False)
     rule_passed = state.get("rule_passed", False)
     style_score = state.get("style_score", 0.8)
     retry_times = state.get("retry_times", 0)
-    
-    # 重试超过上限，强制结束
-    if retry_times >= 3:
+
+    # 重试超过 2 次，强制结束（避免多轮循环超时）
+    if retry_times >= 2:
+        logger.warning(f"quality_gate: 已重试 {retry_times} 次，强制结束")
         return "finalize"
-    
+
+    # 规则不通过 → 先修规则（比 reflect_iterate 快，不需要重新生成全文）
+    if not rule_passed:
+        return "rule_fail"
+
     # 事实不通过 → 反思修正
     if not is_fact_ok:
         return "fact_fail"
-    
-    # 规则不通过 → 规则修正
-    if not rule_passed:
-        return "rule_fail"
     
     # 文风评分较低 → 润色
     if style_score < 0.7:

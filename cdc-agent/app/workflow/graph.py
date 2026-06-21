@@ -25,7 +25,7 @@ from app.workflow.nodes import (
     polish_node, finalize_node,
     # 路由函数
     should_parse_intent, route_by_entity_type,
-    should_validate_outline, quality_gate,
+    should_validate_outline, should_generate_outline, quality_gate,
 )
 
 
@@ -88,8 +88,8 @@ def _build_common_graph():
 
     g.add_edge("segment_filter", "compress_knowledge")
     g.add_edge("template_load", "compress_knowledge")
-    g.add_edge("compress_knowledge", "outline_generate")
-    g.add_edge("outline_generate", "outline_validate")
+    # 注意：compress_knowledge 的出边不在这里设置，由各工作流自行设置
+    # （大纲工作流无条件生成大纲；正文工作流检查是否已有大纲再决定）
 
     # 大纲重新生成后回到校验
     g.add_edge("outline_regenerate", "outline_validate")
@@ -100,8 +100,12 @@ def _build_common_graph():
 
 
 def create_outline_workflow():
-    """大纲工作流：... → 大纲校验 → (通过→END / 不通过→重新生成)"""
+    """大纲工作流：... → 无条件生成大纲 → 大纲校验 → (通过→END / 不通过→重新生成)"""
     g = _build_common_graph()
+
+    # 大纲工作流：无条件生成大纲
+    g.add_edge("compress_knowledge", "outline_generate")
+    g.add_edge("outline_generate", "outline_validate")
 
     g.add_conditional_edges("outline_validate", should_validate_outline, {
         "outline_ok": END,
@@ -114,7 +118,7 @@ def create_outline_workflow():
 def create_draft_workflow():
     """
     完整工作流：
-    ... → 大纲校验 → (通过→正文 / 不通过→重新生成)
+    ... → (已有大纲?→正文 / 无大纲?→生成→校验→重新生成)
     → 正文 → [事实核查 + 规则检查 + 文风检查](并行)
     → 质量门控 → (修正/润色/完成) → END
     """
@@ -130,7 +134,14 @@ def create_draft_workflow():
     g.add_node("polish", polish_node)
     g.add_node("finalize", finalize_node)
 
-    # 大纲校验通过 → 正文生成；不通过 → 重新生成
+    # 知识压缩后：已有大纲 → 直接生成正文；无大纲 → 生成大纲 → 校验
+    g.add_conditional_edges("compress_knowledge", should_generate_outline, {
+        "skip_to_fusion": "fusion_generate",
+        "generate_outline": "outline_generate",
+    })
+    g.add_edge("outline_generate", "outline_validate")
+
+    # 大纲校验通过 → 正文生成；不通过 → 重新生成（最多 2 次）
     g.add_conditional_edges("outline_validate", should_validate_outline, {
         "outline_ok": "fusion_generate",
         "outline_fail": "outline_regenerate",

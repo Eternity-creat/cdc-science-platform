@@ -310,9 +310,9 @@ Agent 采用三层级联配置机制，运行时动态选择模型：
 优先级 3：本地 .env 默认值
 ```
 
-三种模型类型通过 `config_type` 区分：`text_generation`（文本生成）、`embedding`（向量嵌入）、`image_generation`（图片生成）。用户可在前端「LLM 配置」页面可视化管理，修改后立即生效，无需重启。
+三种模型类型通过 `config_type` 区分：`text_generation`（文本生成）、`embedding`（向量嵌入）、`image_generation`（图片生成）。用户可在前端「LLM 配置」页面可视化管理，修改后 60 秒内自动生效，无需重启。
 
-`LLMClientPool` 是全局单例，按 `config_type` 缓存 `LLMClient` 实例。每个 `LLMClient` 使用 `httpx` 异步调用 OpenAI 兼容 API，内置信号量控制（并发上限 5）、指数退避重试（3 次）和中文错误信息翻译。
+`LLMClientPool` 是全局单例，按 `config_type` 缓存 `LLMClient` 实例，内置 60 秒 TTL 自动过期和配置变更检测（model/apiKey/baseUrl 三元组比对，发现变更时自动重建客户端）。每个 `LLMClient` 使用 `httpx` 异步调用 OpenAI 兼容 API，内置信号量控制（并发上限 5）、指数退避重试（3 次）和中文错误信息翻译。
 
 ## 向量检索
 

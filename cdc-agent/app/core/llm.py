@@ -3,9 +3,10 @@ CDC Agent - LLM Client with production hardening.
 
 Features:
 - OpenAI-compatible REST API via httpx (async) — 支持任意模型名称
-- Tenacity retry with exponential backoff (3 attempts, 2s/4s waits)
+- Tenacity retry with exponential backoff (3 attempts, 3s/9s waits)
+- Outer rate-limit retry for 429 errors (30s/60s waits, 3 attempts)
 - Global concurrency control via asyncio.Semaphore(5)
-- Per-request 60-second timeout
+- Per-request 300-second timeout
 - Token usage tracking and accumulation
 - 错误信息中文化，方便前端用户理解
 """
@@ -20,6 +21,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
+    retry_if_exception_message,
     before_sleep_log,
 )
 
@@ -142,8 +144,9 @@ def _humanize_error(status_code: int, body: dict, model: str) -> str:
 _LLM_SEMAPHORE = asyncio.Semaphore(5)
 
 # Per-request timeout in seconds.
-# 推理模型（如 qwen3.7-plus / deepseek-r1）生成较慢，需要较长超时。
-_REQUEST_TIMEOUT = httpx.Timeout(connect=10.0, read=180.0, write=10.0, pool=10.0)
+# 动态 prompt 注入 Layer 1-4 写作知识后 prompt 较大，且长文生成（800+ 字）需要较长推理时间，
+# 300s 与 Nginx proxy_read_timeout 对齐。
+_REQUEST_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -156,14 +159,31 @@ def _llm_retry():
 
     - Retries only on LLMError (not on TimeoutError or other exceptions).
     - 3 total attempts.
-    - Exponential backoff: waits of ~2s then ~4s between attempts.
-      (multiplier=2 => 2^1=2s, 2^2=4s; capped at max=8s)
+    - Exponential backoff: waits of ~3s then ~6s between attempts.
+      (multiplier=3 => 3^1=3s, 3^2=9s; capped at max=12s)
     - Logs each retry via loguru.
     """
     return retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=8),
+        wait=wait_exponential(multiplier=3, min=3, max=12),
         retry=retry_if_exception_type(LLMError),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+        reraise=True,
+    )
+
+
+def _rate_limit_retry():
+    """
+    Outer retry specifically for 429 rate-limit errors (DashScope RPM/TPM 限制).
+
+    - Only retries when the LLMError message contains rate-limit keywords.
+    - 3 total attempts with 30s / 60s waits to outlast the rate-limit window.
+    - Other LLMError (model errors, auth errors) are NOT retried here.
+    """
+    return retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=30, min=30, max=60),
+        retry=retry_if_exception_message(match="频率超限|rate_limit|429"),
         before_sleep=before_sleep_log(logger, "WARNING"),
         reraise=True,
     )
@@ -272,7 +292,11 @@ class LLMClient:
                 raise LLMError("LLM返回空 choices，未生成任何内容")
             return choices[0]["message"]["content"]
 
-        return await _call()
+        @_rate_limit_retry()
+        async def _call_with_rate_limit_retry():
+            return await _call()
+
+        return await _call_with_rate_limit_retry()
 
     # ------------------------------------------------------------------
     # Public: chat with function/tool calling (returns full output dict)
@@ -347,4 +371,8 @@ class LLMClient:
             # 现在 data 本身就有 choices，因此包装一层 {"choices": [...], "usage": {...}}
             return data
 
-        return await _call()
+        @_rate_limit_retry()
+        async def _call_with_rate_limit_retry():
+            return await _call()
+
+        return await _call_with_rate_limit_retry()

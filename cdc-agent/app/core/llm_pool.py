@@ -1,6 +1,7 @@
-"""LLM 客户端共享池 — 按 config_type 缓存客户端实例"""
+"""LLM 客户端共享池 — 按 config_type 缓存客户端实例，支持 60s TTL 热刷新"""
 
-from typing import Dict, Optional
+import time
+from typing import Dict, Tuple, Optional
 from app.core.llm import LLMClient
 from app.core.config import settings
 from loguru import logger
@@ -13,26 +14,36 @@ class ConfigManager:
     所有文本类 skill（fact_check、rule_check、intent_parse 等）共享
     text_generation 配置。当子类型在 DB 中找不到时，自动回退到
     text_generation。
+    
+    缓存带 60 秒 TTL，前端修改配置后最多 60 秒自动生效，无需重启 Agent。
     """
 
     # 文本生成子类型 — 前端不单独管理，统一使用 text_generation 配置
-    _TEXT_SUB_TYPES = {"fact_check", "rule_check", "intent_parse", "reflect_iterate"}
+    _TEXT_SUB_TYPES = {"fact_check", "rule_check", "intent_parse", "reflect_iterate",
+                       "skill_planner", "outline_validate", "style_check", "polish",
+                       "rule_reflect", "outline_generate", "fusion_generate"}
+
+    _CACHE_TTL = 60  # seconds
     
     def __init__(self, java_backend_url: str = None):
         self.java_url = java_backend_url or settings.JAVA_BACKEND_URL
-        self._cache: Dict[str, dict] = {}
+        self._cache: Dict[str, Tuple[dict, float]] = {}
     
     def get_config(self, config_type: str) -> dict:
         """获取指定类型的默认 LLM 配置。
         
         查找顺序：
-        1. 本地缓存
+        1. 本地缓存（60 秒内有效）
         2. DB 中该类型的默认配置
         3. 若为文本子类型 → 回退到 text_generation
         4. 最终回退到本地 .env 默认值
         """
+        # 检查缓存（带 TTL）
         if config_type in self._cache:
-            return self._cache[config_type]
+            cached_config, cached_at = self._cache[config_type]
+            if time.time() - cached_at < self._CACHE_TTL:
+                return cached_config
+            logger.debug(f"ConfigManager: {config_type} 缓存过期，重新获取")
         
         # 尝试从 DB 获取该类型的配置
         config = self._fetch_from_db(config_type)
@@ -43,7 +54,7 @@ class ConfigManager:
             config = self._fetch_from_db("text_generation")
         
         if config is not None:
-            self._cache[config_type] = config
+            self._cache[config_type] = (config, time.time())
             return config
         
         # 最终回退到本地 .env 默认值
@@ -80,27 +91,43 @@ class ConfigManager:
 
 
 class LLMClientPool:
-    """LLM 客户端池 — 按 config_type 缓存"""
+    """LLM 客户端池 — 按 config_type 缓存，检测配置变更自动重建客户端"""
     
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
         self._clients: Dict[str, LLMClient] = {}
+        self._client_keys: Dict[str, tuple] = {}
     
     def get_client(self, config_type: str = "text_generation") -> LLMClient:
-        if config_type not in self._clients:
-            config = self.config_manager.get_config(config_type)
-            self._clients[config_type] = LLMClient(
-                api_key=_cfg(config, "api_key_encrypted", "apiKeyEncrypted", "api_key", "apiKey", default=settings.DASHSCOPE_API_KEY),
-                model=_cfg(config, "model_name", "modelName", "model", default=settings.LLM_MODEL),
-                base_url=_cfg(config, "base_url", "baseUrl", default=settings.DEFAULT_BASE_URL),
-            )
+        config = self.config_manager.get_config(config_type)
+
+        model = _cfg(config, "model_name", "modelName", "model", default=settings.LLM_MODEL)
+        api_key = _cfg(config, "api_key_encrypted", "apiKeyEncrypted", "api_key", "apiKey", default=settings.DASHSCOPE_API_KEY)
+        base_url = _cfg(config, "base_url", "baseUrl", default=settings.DEFAULT_BASE_URL)
+
+        current_key = (model, api_key, base_url)
+
+        if config_type in self._clients and self._client_keys.get(config_type) == current_key:
+            return self._clients[config_type]
+
+        if config_type in self._clients:
+            logger.info(f"LLMClientPool: {config_type} 配置变更 (model={model})，重建客户端")
+
+        self._clients[config_type] = LLMClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+        self._client_keys[config_type] = current_key
         return self._clients[config_type]
     
     def refresh(self, config_type: str = None):
         if config_type:
             self._clients.pop(config_type, None)
+            self._client_keys.pop(config_type, None)
         else:
             self._clients.clear()
+            self._client_keys.clear()
         self.config_manager.refresh(config_type)
 
 

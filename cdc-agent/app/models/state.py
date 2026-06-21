@@ -233,6 +233,7 @@ class AgentState(BaseModel):
     # -- 大纲校验 ----------------------------------------------------------
     outline_valid: Optional[bool] = None      # 大纲是否通过校验
     outline_feedback: Optional[str] = None    # 大纲校验反馈
+    outline_retry_count: int = 0              # 大纲重新生成次数（最多 2 次）
 
     # -- 规则修正 ----------------------------------------------------------
     rule_check_report: Optional[str] = None   # 规则检查详细报告 JSON

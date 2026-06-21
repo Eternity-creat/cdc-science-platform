@@ -2,6 +2,16 @@
 
 本项目的所有重要变更都记录在此文件中。格式基于 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [1.2.1] - 2026-06-21
+
+### 修复（LLM 超时问题）
+
+- **compress_knowledge 无距离时全量灌入**：`compress_knowledge_node` 在无距离信息时从"跳过压缩"改为"截断到前 8 条"，避免所有知识片段未压缩地传入 LLM prompt 导致超时
+- **fusion prompt 知识片段无上限**：`build_fusion_prompt()` 对 `wiki_segments` 和 `top_k_segment_list` 增加 `[:10]` 截断，与 `build_outline_prompt()` 保持一致
+- **httpx read timeout 不足**：`_REQUEST_TIMEOUT` read 值从 180s 提升到 300s，适配动态 prompt 注入 Layer 1-4 写作知识后的大 prompt 场景，与 Nginx `proxy_read_timeout 300s` 对齐
+- **ConfigManager 缓存无 TTL**：`ConfigManager._cache` 和 `LLMClientPool._clients` 新增 60 秒 TTL 自动过期 + 配置变更检测（model/apiKey/baseUrl 三元组比对），LLM 配置修改后 60 秒内自动生效，无需重启 Agent
+- **`_TEXT_SUB_TYPES` 白名单不全**：新增 `skill_planner`、`outline_validate`、`style_check`、`polish`、`rule_reflect`、`outline_generate`、`fusion_generate` 7 个子类型，确保所有 LLM 调用的 Skill 都能正确回退到 `text_generation` 配置
+
 ## [1.2.0] - 2026-06-21
 
 ### 新增（写作知识体系）

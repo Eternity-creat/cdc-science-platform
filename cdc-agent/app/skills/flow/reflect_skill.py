@@ -49,11 +49,17 @@ class ReflectIterateSkill(BaseSkill):
             logger.warning("ReflectIterateSkill: 超过最大重试次数")
             return new_state
 
-        # 合并权威知识片段
+        # 合并权威知识片段（限制数量，提取 content 字段避免 Pydantic repr 膨胀）
         if wiki_segments:
-            segment_content = "\n".join([f"- {s}" for s in wiki_segments])
+            segment_content = "\n".join([
+                f"- {s.get('content', s) if hasattr(s, 'get') else s}"
+                for s in wiki_segments[:10]
+            ])
         elif segments:
-            segment_content = "\n".join([f"- {s.get('content', '')}" for s in segments])
+            segment_content = "\n".join([
+                f"- {s.get('content', '') if hasattr(s, 'get') else s}"
+                for s in segments[:10]
+            ])
         else:
             segment_content = "无权威片段"
 
@@ -63,6 +69,7 @@ class ReflectIterateSkill(BaseSkill):
             segment_content=segment_content
         )
 
+        logger.info(f"ReflectIterateSkill: prompt 长度: {len(prompt)} 字符")
         messages = [{"role": "user", "content": prompt}]
         response = await self.llm.chat(messages)
         new_state["initial_draft"] = response
