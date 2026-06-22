@@ -208,10 +208,13 @@ class LLMClient:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         base_url: Optional[str] = None,
+        extra_params: Optional[Dict[str, Any]] = None,
     ):
         self.api_key = api_key or settings.DASHSCOPE_API_KEY
         self.model = model or settings.LLM_MODEL
         self.base_url = (base_url or _DEFAULT_BASE_URL).rstrip("/")
+        # 模型级额外参数（来自 DB cdc_llm_config.params），如 {"thinking": {"type": "disabled"}}
+        self.extra_params = extra_params or {}
 
     def _build_headers(self) -> Dict[str, str]:
         """构建 OpenAI-compatible 请求头。"""
@@ -252,7 +255,8 @@ class LLMClient:
                 "model": self.model,
                 "messages": messages,
             }
-            # 把 kwargs 中的合法参数透传（temperature, max_tokens, top_p, stop, ...）
+            # 注入配置级参数（如 thinking、temperature），再叠加调用级 kwargs
+            body.update({k: v for k, v in self.extra_params.items() if v is not None})
             body.update({k: v for k, v in kwargs.items() if v is not None})
 
             async with _LLM_SEMAPHORE:
@@ -333,6 +337,8 @@ class LLMClient:
                 "messages": messages,
                 "tools": tools,
             }
+            # 注入配置级参数（如 thinking、temperature），再叠加调用级 kwargs
+            body.update({k: v for k, v in self.extra_params.items() if v is not None})
             body.update({k: v for k, v in kwargs.items() if v is not None})
 
             async with _LLM_SEMAPHORE:

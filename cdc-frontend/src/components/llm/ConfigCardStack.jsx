@@ -8,7 +8,6 @@ import { Button } from '../ui/button.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog.jsx';
 import { Badge } from '../ui/badge.jsx';
 import { Input } from '../ui/input.jsx';
-import { Textarea } from '../ui/textarea.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select.jsx';
 import { Separator } from '../ui/separator.jsx';
 import { cn } from '../../lib/utils.js';
@@ -61,9 +60,99 @@ function ToggleSwitch({ checked, onChange, disabled }) {
   );
 }
 
+/* ── Smart value parser ───────────────────────────────── */
+
+function smartParseValue(str) {
+  const trimmed = str.trim();
+  if (trimmed === '') return '';
+  // Try JSON parse (handles objects, arrays, booleans, null)
+  try {
+    return JSON.parse(trimmed);
+  } catch { /* fall through */ }
+  // Try number
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    const num = Number(trimmed);
+    if (!isNaN(num)) return num;
+  }
+  return trimmed;
+}
+
+/* ── Params Key-Value Editor ──────────────────────────── */
+
+function ParamsEditor({ kvPairs, setKvPairs }) {
+  const addRow = () => setKvPairs(prev => [...prev, { key: '', value: '' }]);
+
+  const removeRow = (idx) => setKvPairs(prev => prev.filter((_, i) => i !== idx));
+
+  const updateRow = (idx, field, val) =>
+    setKvPairs(prev => prev.map((pair, i) =>
+      i === idx ? { ...pair, [field]: val } : pair
+    ));
+
+  // Build live JSON preview
+  const jsonObj = {};
+  let hasValidPair = false;
+  kvPairs.forEach(p => {
+    if (p.key.trim()) {
+      jsonObj[p.key.trim()] = smartParseValue(p.value);
+      hasValidPair = true;
+    }
+  });
+  const jsonPreview = hasValidPair
+    ? JSON.stringify(jsonObj, null, 2)
+    : '';
+
+  return (
+    <div className="space-y-2">
+      {kvPairs.map((pair, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <Input
+            placeholder="参数名"
+            value={pair.key}
+            onChange={e => updateRow(idx, 'key', e.target.value)}
+            className="flex-[2] font-mono text-xs"
+          />
+          <Input
+            placeholder="值"
+            value={pair.value}
+            onChange={e => updateRow(idx, 'value', e.target.value)}
+            className="flex-[3] font-mono text-xs"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 shrink-0 text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.08)]"
+            onClick={() => removeRow(idx)}
+          >
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      ))}
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="text-xs gap-1.5 w-full border-dashed"
+        onClick={addRow}
+      >
+        <Plus size={13} /> 添加参数
+      </Button>
+
+      {jsonPreview && (
+        <div className="space-y-1">
+          <label className="text-micro text-muted-foreground font-medium">JSON 预览（只读）</label>
+          <pre className="p-2.5 rounded-md bg-[hsl(var(--muted))] border text-xs font-mono overflow-x-auto max-h-32 whitespace-pre text-[hsl(var(--foreground)/0.85)]">
+            {jsonPreview}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Config Edit Form (shared between edit & add) ──────── */
 
-function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, onCancel }) {
+function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, onCancel, paramsKv, setParamsKv }) {
   const onField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
 
   return (
@@ -117,14 +206,8 @@ function ConfigForm({ formData, setFormData, onSubmit, submitLabel, submitting, 
         </div>
         <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">模型参数</label>
-          <Textarea
-            placeholder='{"temperature": 0.7, "max_tokens": 2048}'
-            value={formData.params}
-            onChange={e => onField('params', e.target.value)}
-            rows={2}
-            className="font-mono text-xs"
-          />
-          <p className="text-micro text-muted-foreground">JSON 格式，可选</p>
+          <ParamsEditor kvPairs={paramsKv} setKvPairs={setParamsKv} />
+          <p className="text-micro text-muted-foreground">键值对形式配置，值支持 JSON 对象、数字或字符串</p>
         </div>
         <div className="sm:col-span-2 space-y-1.5">
           <label className="text-label">描述</label>
@@ -189,6 +272,35 @@ export default function ConfigCardStack({
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [slideDir, setSlideDir] = useState(null);
+  const [paramsKv, setParamsKv] = useState([]);
+
+  // JSON string → KV pairs
+  const jsonToKv = (jsonStr) => {
+    if (!jsonStr || jsonStr === '') return [];
+    try {
+      const obj = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+        return Object.entries(obj).map(([key, value]) => ({
+          key,
+          value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+        }));
+      }
+    } catch { /* invalid JSON */ }
+    return [];
+  };
+
+  // KV pairs → JSON string
+  const kvToJson = (pairs) => {
+    const obj = {};
+    let hasValid = false;
+    pairs.forEach(p => {
+      if (p.key.trim()) {
+        obj[p.key.trim()] = smartParseValue(p.value);
+        hasValid = true;
+      }
+    });
+    return hasValid ? JSON.stringify(obj) : '';
+  };
 
   // Always use propConfigs directly — single source of truth from parent
   const configs = propConfigs;
@@ -235,6 +347,7 @@ export default function ConfigCardStack({
       description: current.description || '',
       isEnabled: current.isEnabled ?? 1,
     });
+    setParamsKv(jsonToKv(current.params));
     setViewMode('edit');
   }, [current]);
 
@@ -260,6 +373,7 @@ export default function ConfigCardStack({
     try {
       await llmApi.updateConfig(current.id, {
         ...formData,
+        params: kvToJson(paramsKv),
         configType,
         isEnabled: Number(formData.isEnabled),
       });
@@ -280,6 +394,7 @@ export default function ConfigCardStack({
     try {
       await llmApi.addConfig({
         ...formData,
+        params: kvToJson(paramsKv),
         configType,
         isDefault: configs.length === 0 ? 1 : 0,
         isEnabled: Number(formData.isEnabled),
@@ -333,7 +448,7 @@ export default function ConfigCardStack({
               <AlertCircle size={22} className="text-muted-foreground" />
             </div>
             <p className="text-body text-muted-foreground mb-4">暂无配置，点击下方按钮创建第一个模型配置</p>
-            <Button onClick={() => { setViewMode('add'); setFormData({ ...emptyFormData, configName: `${typeLabel}配置` }); }}>
+            <Button onClick={() => { setViewMode('add'); setFormData({ ...emptyFormData, configName: `${typeLabel}配置` }); setParamsKv([]); }}>
               <Plus size={14} className="mr-1.5" /> 新增配置
             </Button>
           </div>
@@ -537,6 +652,8 @@ export default function ConfigCardStack({
               submitLabel="保存修改"
               submitting={submitting}
               onCancel={() => setViewMode('front')}
+              paramsKv={paramsKv}
+              setParamsKv={setParamsKv}
             />
           </div>
         )}
@@ -550,7 +667,7 @@ export default function ConfigCardStack({
                 variant="ghost"
                 size="sm"
                 className="h-8 text-xs gap-1.5"
-                onClick={() => { setViewMode(configs.length > 0 ? 'front' : 'front'); setFormData({ ...emptyFormData }); }}
+                onClick={() => { setViewMode(configs.length > 0 ? 'front' : 'front'); setFormData({ ...emptyFormData }); setParamsKv([]); }}
               >
                 <RotateCcw size={13} /> 取消
               </Button>
@@ -561,7 +678,9 @@ export default function ConfigCardStack({
               onSubmit={handleAdd}
               submitLabel="创建配置"
               submitting={submitting}
-              onCancel={() => { setViewMode(configs.length > 0 ? 'front' : 'front'); setFormData({ ...emptyFormData }); }}
+              onCancel={() => { setViewMode(configs.length > 0 ? 'front' : 'front'); setFormData({ ...emptyFormData }); setParamsKv([]); }}
+              paramsKv={paramsKv}
+              setParamsKv={setParamsKv}
             />
           </div>
         )}
@@ -573,7 +692,7 @@ export default function ConfigCardStack({
               variant="ghost"
               size="sm"
               className="text-xs gap-1.5"
-              onClick={() => { setViewMode('add'); setFormData({ ...emptyFormData, configName: `${typeLabel}配置` }); }}
+              onClick={() => { setViewMode('add'); setFormData({ ...emptyFormData, configName: `${typeLabel}配置` }); setParamsKv([]); }}
             >
               <Plus size={14} /> 新增配置
             </Button>

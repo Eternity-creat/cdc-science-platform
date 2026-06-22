@@ -104,8 +104,11 @@ class LLMClientPool:
         model = _cfg(config, "model_name", "modelName", "model", default=settings.LLM_MODEL)
         api_key = _cfg(config, "api_key_encrypted", "apiKeyEncrypted", "api_key", "apiKey", default=settings.DASHSCOPE_API_KEY)
         base_url = _cfg(config, "base_url", "baseUrl", default=settings.DEFAULT_BASE_URL)
+        extra_params = _parse_params(_cfg(config, "params"))
 
-        current_key = (model, api_key, base_url)
+        # 缓存 key 包含 params hash，params 变更时自动重建客户端
+        params_hash = _stable_hash(extra_params)
+        current_key = (model, api_key, base_url, params_hash)
 
         if config_type in self._clients and self._client_keys.get(config_type) == current_key:
             return self._clients[config_type]
@@ -117,6 +120,7 @@ class LLMClientPool:
             api_key=api_key,
             model=model,
             base_url=base_url,
+            extra_params=extra_params,
         )
         self._client_keys[config_type] = current_key
         return self._clients[config_type]
@@ -145,7 +149,7 @@ def get_config_manager() -> ConfigManager:
 
 def _cfg(config: dict, *keys, default=None):
     """从配置字典中读取值，同时兼容 snake_case 和 camelCase 字段名。
-    
+
     Java 后端 JSON 响应使用 camelCase（modelName, apiKeyEncrypted, baseUrl），
     而 Python 惯用 snake_case（model_name, api_key_encrypted, base_url）。
     本方法按优先级依次尝试所有候选 key，取第一个非 None 且非空字符串的值。
@@ -155,6 +159,38 @@ def _cfg(config: dict, *keys, default=None):
         if val is not None and val != "":
             return val
     return default
+
+
+def _parse_params(raw) -> dict:
+    """解析配置中的 params 字段为 dict。
+
+    支持三种输入：
+    - None / 空字符串 → {}
+    - JSON 字符串（'{"thinking": {"type": "disabled"}}'）→ dict
+    - 已经是 dict → 原样返回
+    """
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        import json
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(f"LLMClientPool: params 解析失败，忽略: {raw[:100]}")
+            return {}
+    return {}
+
+
+def _stable_hash(obj) -> str:
+    """对 dict 生成稳定的字符串 hash，用于缓存 key 比较。"""
+    import json, hashlib
+    if not obj:
+        return ""
+    canonical = json.dumps(obj, sort_keys=True, ensure_ascii=False)
+    return hashlib.md5(canonical.encode()).hexdigest()[:12]
 
 
 def get_model_config(config_type: str) -> dict:
