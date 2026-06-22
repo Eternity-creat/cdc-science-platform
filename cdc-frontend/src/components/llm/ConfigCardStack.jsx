@@ -385,7 +385,7 @@ export default function ConfigCardStack({
     } finally {
       setSubmitting(false);
     }
-  }, [formData, current, configType, onRefresh]);
+  }, [formData, current, configType, onRefresh, paramsKv, kvToJson]);
 
   /* ── API: Add new ── */
   const handleAdd = useCallback(async () => {
@@ -408,7 +408,7 @@ export default function ConfigCardStack({
     } finally {
       setSubmitting(false);
     }
-  }, [formData, configType, configs.length, onRefresh]);
+  }, [formData, configType, configs.length, onRefresh, paramsKv, kvToJson]);
 
   /* ── API: Delete (inline confirm) ── */
   const handleDelete = useCallback(async (id) => {
