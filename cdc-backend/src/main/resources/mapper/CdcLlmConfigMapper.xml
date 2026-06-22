@@ -10,7 +10,7 @@
         <result column="model_name" property="modelName"/>
         <result column="api_key_encrypted" property="apiKeyEncrypted"/>
         <result column="base_url" property="baseUrl"/>
-        <result column="params" property="params"/>
+        <result column="params" property="params" jdbcType="VARCHAR"/>
         <result column="is_default" property="isDefault"/>
         <result column="is_enabled" property="isEnabled"/>
         <result column="description" property="description"/>
@@ -39,14 +39,14 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO cdc_llm_config (config_name, config_type, provider, model_name, api_key_encrypted, base_url, params, is_default, is_enabled, description)
-        VALUES (#{configName}, #{configType}, #{provider}, #{modelName}, #{apiKeyEncrypted}, #{baseUrl}, #{params}, #{isDefault}, #{isEnabled}, #{description})
+        VALUES (#{configName}, #{configType}, #{provider}, #{modelName}, #{apiKeyEncrypted}, #{baseUrl}, #{params,jdbcType=VARCHAR}, #{isDefault}, #{isEnabled}, #{description})
     </insert>
 
     <update id="update">
         UPDATE cdc_llm_config
         SET config_name = #{configName}, config_type = #{configType}, provider = #{provider},
             model_name = #{modelName}, api_key_encrypted = #{apiKeyEncrypted}, base_url = #{baseUrl},
-            params = #{params}, is_default = #{isDefault}, is_enabled = #{isEnabled}, description = #{description}
+            params = #{params,jdbcType=VARCHAR}, is_default = #{isDefault}, is_enabled = #{isEnabled}, description = #{description}
         WHERE id = #{id}
     </update>
 
