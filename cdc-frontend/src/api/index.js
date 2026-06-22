@@ -4,27 +4,43 @@
  */
 
 const BASE_URL = '/api';
+const DEFAULT_TIMEOUT = 600000; // 600s, aligned with Nginx proxy_read_timeout
 
 async function request(url, options = {}) {
-  const res = await fetch(`${BASE_URL}${url}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  });
+  const timeout = options.timeout || DEFAULT_TIMEOUT;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
 
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  try {
+    const { timeout: _, ...fetchOptions } = options;
+    const res = await fetch(`${BASE_URL}${url}`, {
+      ...fetchOptions,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const json = await res.json();
+
+    if (json.code !== 200) {
+      throw new Error(json.msg || '请求失败');
+    }
+
+    return json.data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('请求超时，AI 正在生成内容，请稍后刷新页面查看结果');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-
-  const json = await res.json();
-
-  if (json.code !== 200) {
-    throw new Error(json.msg || '请求失败');
-  }
-
-  return json.data;
 }
 
 export const get = (url) => request(url);
