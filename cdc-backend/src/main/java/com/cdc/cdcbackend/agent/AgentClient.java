@@ -157,7 +157,9 @@ public class AgentClient {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
 
-            HttpClient client = HttpClient.newBuilder().build();
+            HttpClient client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
             HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 String errorBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
