@@ -1,0 +1,73 @@
+# CDC 公众号科普写作 Skill 体系 -- 元索引
+version: "1.0"
+
+article_types:
+  disease_explainer:
+    display_name: "疾病科普"
+    match_keywords: ["疾病", "传染病", "感染", "疫情", "病毒", "细菌"]
+    entity_types: ["disease", "epidemic"]
+    blueprint: "blueprints/disease_explainer.md"
+    default_audience: "general_public"
+    required_sections: ["引入", "疾病定义", "传播途径", "症状表现", "预防措施", "就医指引", "总结"]
+
+  vaccine_guide:
+    display_name: "疫苗接种指南"
+    match_keywords: ["疫苗", "接种", "免疫", "打针"]
+    entity_types: ["vaccine"]
+    blueprint: "blueprints/vaccine_guide.md"
+    default_audience: "parents"
+    required_sections: ["引入", "疫苗简介", "接种对象", "接种程序", "常见疑问", "注意事项", "总结"]
+
+  outbreak_alert:
+    display_name: "疫情/健康提醒"
+    match_keywords: ["暴发", "预警", "提醒", "速报", "通报", "新增"]
+    entity_types: ["disease", "epidemic"]
+    blueprint: "blueprints/outbreak_alert.md"
+    default_audience: "general_public"
+    required_sections: ["速览", "当前形势", "风险提示", "防护建议", "信息来源"]
+
+  myth_buster:
+    display_name: "谣言粉碎"
+    match_keywords: ["谣言", "辟谣", "误区", "真相", "假的", "传闻"]
+    blueprint: "blueprints/myth_buster.md"
+    default_audience: "general_public"
+    required_sections: ["谣言引用", "真相速览", "逐条拆解", "辨别方法", "核心要点"]
+
+  seasonal_health:
+    display_name: "季节性健康提示"
+    match_keywords: ["春季", "夏季", "秋季", "冬季", "换季", "节气"]
+    blueprint: "blueprints/seasonal_health.md"
+    default_audience: "general_public"
+    required_sections: ["季节特点", "高发疾病", "预防要点", "生活建议", "总结"]
+
+  case_story:
+    display_name: "案例故事"
+    match_keywords: ["案例", "故事", "经历", "病例", "真实"]
+    blueprint: "blueprints/case_story.md"
+    default_audience: "general_public"
+    required_sections: ["故事引入", "病情分析", "科普解读", "预防建议", "结语"]
+
+audience_profiles:
+  general_public: "audiences/general_public.md"
+  parents: "audiences/parents.md"
+  elderly: "audiences/elderly.md"
+  students: "audiences/students.md"
+  healthcare_workers: "audiences/healthcare_workers.md"
+
+technique_cards:
+  hook_opening: "techniques/hook_opening.md"
+  data_presentation: "techniques/data_presentation.md"
+  analogy_explanation: "techniques/analogy_explanation.md"
+  myth_bust_pattern: "techniques/myth_bust_pattern.md"
+  cta_closing: "techniques/cta_closing.md"
+  emotion_writing: "techniques/emotion_writing.md"
+  faq_pattern: "techniques/faq_pattern.md"
+  wechat_formatting: "techniques/wechat_formatting.md"
+
+quality_benchmarks:
+  disease_explainer: "quality/disease_explainer.md"
+  vaccine_guide: "quality/vaccine_guide.md"
+  outbreak_alert: "quality/outbreak_alert.md"
+  myth_buster: "quality/myth_buster.md"
+  seasonal_health: "quality/seasonal_health.md"
+  case_story: "quality/case_story.md"

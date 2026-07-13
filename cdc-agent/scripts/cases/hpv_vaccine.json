@@ -1,0 +1,32 @@
+{
+  "case_name": "HPV疫苗科普文章",
+  "description": "测试HPV疫苗对成年女性群体的科普文章生成",
+  "article_id": 1,
+  "entity_name": "HPV疫苗",
+  "population_name": "成年女性",
+  "scene_name": "健康科普",
+  "template_name": "标准科普模板",
+  "template_purpose": "科普宣教，普及疫苗相关知识",
+  "template_tone": "专业、温和、通俗易懂",
+  "template_outline": "1.概述\n2.适用人群\n3.接种意义\n4.注意事项",
+  "word_count": 800,
+  "step": "outline",
+  "mode": 1,
+  "user_text": "",
+  "wiki_segments": [
+    "HPV疫苗是预防宫颈癌的重要手段，目前有二价、四价和九价三种",
+    "HPV疫苗推荐接种年龄为9-45岁女性，越早接种效果越好",
+    "HPV疫苗主要通过预防HPV病毒感染来降低宫颈癌风险",
+    "接种HPV疫苗后可能出现的常见反应包括接种部位疼痛、轻微发热等",
+    "孕妇或计划怀孕的女性应暂缓接种HPV疫苗"
+  ],
+  "must_include": [
+    "必须说明疫苗的作用原理",
+    "必须说明推荐的接种年龄",
+    "必须说明接种后的注意事项"
+  ],
+  "must_not_say": [
+    "疫苗可以完全预防所有癌症",
+    "接种后就不需要再做宫颈癌筛查"
+  ]
+}

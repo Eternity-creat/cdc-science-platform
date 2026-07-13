@@ -1,0 +1,777 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================
+   CDC Science Communication Platform — Corporate Warm
+   企业暖色: Warm Blue #2D6A9F + Coral #FF7F50 + Teal #4ECDC4
+   Source: Color-Palette-Skill v3.0.0 / style-corporate-warm
+   Professional yet approachable, warm and confident
+   ============================================================= */
+
+@layer base {
+  :root {
+    /* ── Core Palette — Clean Light ── */
+    --background: 210 17% 98%;
+    --foreground: 210 29% 24%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 29% 24%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 29% 24%;
+
+    /* Primary — Warm Blue #2D6A9F */
+    --primary: 208 56% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary — Coral #FF7F50 */
+    --secondary: 16 100% 66%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted — Light gray */
+    --muted: 210 14% 93%;
+    --muted-foreground: 184 6% 53%;
+
+    /* Accent — Teal #4ECDC4 */
+    --accent: 176 56% 92%;
+    --accent-foreground: 210 29% 24%;
+
+    /* Destructive — Vivid Red #E74C3C */
+    --destructive: 6 78% 57%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders — Soft Gray #DEE2E6 */
+    --border: 210 14% 89%;
+    --input: 210 14% 89%;
+    --ring: 208 56% 40%;
+
+    /* Radius — crisp 8px system */
+    --radius: 0.5rem;
+    --radius-lg: 8px;
+    --radius-md: 6px;
+    --radius-sm: 4px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-full: 9999px;
+
+    /* ── Signal Colors ── */
+    --signal-blue: 208 56% 40%;
+    --signal-cyan: 208 56% 40%;
+    --signal-green: 145 63% 42%;
+    --signal-violet: 260 50% 50%;
+
+    /* ── Status Colors ── */
+    --success: 145 63% 42%;
+    --warning: 37 90% 51%;
+    --info: 208 56% 40%;
+
+    /* ── Vibrant Accents (for entity types etc.) ── */
+    --accent-coral: 16 100% 66%;
+    --accent-sky: 208 56% 40%;
+    --accent-mint: 176 56% 55%;
+    --accent-amber: 37 90% 51%;
+    --accent-violet: 260 50% 50%;
+
+    /* ── Dark Card ── */
+    --dark-card: 213 33% 21%;
+    --dark-card-foreground: 210 17% 98%;
+
+    /* ── Sidebar — Deep Navy ── */
+    --sidebar-background: 218 32% 15%;
+    --sidebar-foreground: 210 17% 98%;
+    --sidebar-primary: 208 56% 50%;
+    --sidebar-primary-foreground: 218 32% 15%;
+    --sidebar-accent: 213 33% 21%;
+    --sidebar-accent-foreground: 210 17% 98%;
+    --sidebar-border: 218 30% 19%;
+    --sidebar-ring: 218 30% 19%;
+    --sidebar-muted: 210 10% 50%;
+
+    /* ── Design System Tokens ── */
+    --drawer-width: 480px;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-elevated: 0 2px 8px rgba(0, 0, 0, 0.07);
+    --shadow-modal: 0 10px 40px rgba(0, 0, 0, 0.10);
+    --shadow-glass: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --shadow-signal: 0 0 20px rgba(45, 106, 159, 0.2);
+
+    --page-bg-gradient: hsl(210 17% 98%);
+
+    /* CTA: Warm blue gradient (subtle) */
+    --gradient-signal: linear-gradient(135deg, hsl(208 56% 40%) 0%, hsl(208 50% 50%) 100%);
+
+    /* ── Entity Type Colors ── */
+    --color-disease: 208 56% 40%;
+    --color-vaccine: 145 63% 35%;
+    --color-population: 37 90% 45%;
+    --color-scene: 6 78% 47%;
+  }
+
+  .dark {
+    /* ── Dark Mode — Corporate Navy Night ── */
+    --background: 218 32% 15%;
+    --foreground: 210 17% 98%;
+    --card: 213 33% 21%;
+    --card-foreground: 210 17% 98%;
+    --popover: 213 33% 21%;
+    --popover-foreground: 210 17% 98%;
+
+    /* Primary — Brighter Warm Blue on dark */
+    --primary: 208 56% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary — Coral on dark */
+    --secondary: 16 80% 58%;
+    --secondary-foreground: 218 32% 15%;
+
+    /* Muted — Dark muted */
+    --muted: 213 25% 24%;
+    --muted-foreground: 210 10% 60%;
+
+    /* Accent — Teal tint on dark */
+    --accent: 176 40% 18%;
+    --accent-foreground: 210 17% 98%;
+
+    /* Destructive */
+    --destructive: 6 78% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders — Dark line */
+    --border: 213 20% 28%;
+    --input: 213 20% 28%;
+    --ring: 208 56% 50%;
+
+    /* ── Dark Mode Status Colors ── */
+    --success: 145 60% 45%;
+    --warning: 37 85% 55%;
+    --info: 208 50% 55%;
+
+    /* ── Dark Mode Accents ── */
+    --accent-coral: 16 80% 58%;
+    --accent-sky: 208 50% 55%;
+    --accent-mint: 176 50% 50%;
+    --accent-amber: 37 85% 55%;
+    --accent-violet: 260 55% 60%;
+
+    --dark-card: 213 33% 21%;
+    --dark-card-foreground: 210 17% 98%;
+
+    /* ── Dark Mode Sidebar ── */
+    --sidebar-background: 218 35% 12%;
+    --sidebar-foreground: 210 17% 98%;
+    --sidebar-primary: 208 56% 50%;
+    --sidebar-primary-foreground: 218 35% 12%;
+    --sidebar-accent: 213 33% 18%;
+    --sidebar-accent-foreground: 210 17% 98%;
+    --sidebar-border: 218 30% 16%;
+    --sidebar-ring: 218 30% 16%;
+    --sidebar-muted: 210 10% 50%;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-elevated: 0 2px 8px rgba(0, 0, 0, 0.6);
+    --shadow-modal: 0 10px 40px rgba(0, 0, 0, 0.7);
+    --shadow-glass: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-signal: 0 0 25px rgba(45, 106, 159, 0.3);
+
+    --page-bg-gradient: hsl(218 32% 15%);
+
+    --gradient-signal: linear-gradient(135deg, hsl(208 56% 50%) 0%, hsl(208 50% 42%) 100%);
+
+    /* ── Dark Mode Entity Colors ── */
+    --color-disease: 208 50% 55%;
+    --color-vaccine: 145 60% 45%;
+    --color-population: 37 85% 55%;
+    --color-scene: 6 78% 55%;
+  }
+}
+
+/* ── Base Reset ── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background: var(--page-bg-gradient);
+    min-height: 100vh;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+      "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* ── Typography Scale ── */
+@layer utilities {
+  .page-shell {
+    width: 100%;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  @media (min-width: 1024px) {
+    .page-shell {
+      padding: 2rem 2.25rem;
+      gap: 1.5rem;
+    }
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .page-shell {
+      padding: 1rem;
+      gap: 1rem;
+    }
+    .page-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+  }
+
+  .status-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+  }
+  .status-filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .table-shell {
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-xl);
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-card);
+  }
+  .table-shell > div {
+    overflow-x: auto;
+  }
+  .table-shell table {
+    table-layout: fixed;
+  }
+
+  .text-page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+  }
+  .text-section-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+  }
+  .text-body {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+  .text-helper {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  .text-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+  }
+  .text-micro {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .text-page-desc {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.375rem;
+  }
+}
+
+/* ── Surface Utilities ── */
+@layer utilities {
+  .surface-card {
+    background: hsl(var(--card));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    border: 1px solid hsl(var(--border));
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+  .surface-card:hover {
+    box-shadow: var(--shadow-elevated);
+  }
+  .surface-elevated {
+    background: hsl(var(--card));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-elevated);
+    border: 1px solid hsl(var(--border));
+  }
+  .surface-dark {
+    background: hsl(var(--dark-card));
+    color: hsl(var(--dark-card-foreground));
+    border-radius: var(--radius-lg);
+  }
+  .surface-dark .text-muted {
+    color: hsl(var(--dark-card-foreground) / 0.6);
+  }
+}
+
+/* =============================================================
+   LIQUID GLASS SYSTEM — Minimal, warm-stone tuned
+   ============================================================= */
+@layer utilities {
+  /* ── Light Glass — nav pills, badges ── */
+  .liquid-glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: none !important;
+    box-shadow: inset 0 1px 1px hsl(0 0% 100% / 0.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .dark .liquid-glass {
+    background: hsl(213 33% 21% / 0.85);
+    box-shadow: inset 0 1px 1px hsl(0 0% 100% / 0.06);
+  }
+
+  /* ── Strong Glass — feature panels, drawers ── */
+  .liquid-glass-strong {
+    background: hsl(var(--card) / 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: none !important;
+    box-shadow:
+      inset 0 1px 1px hsl(0 0% 100% / 0.1),
+      var(--shadow-glass);
+    position: relative;
+    overflow: hidden;
+  }
+  .dark .liquid-glass-strong {
+    background: hsl(213 33% 21% / 0.85);
+    box-shadow:
+      inset 0 1px 1px hsl(0 0% 100% / 0.06),
+      var(--shadow-glass);
+  }
+
+  /* ── Gradient Pseudo-Border — warm wireline edges ── */
+  .glass-border {
+    position: relative;
+  }
+  .glass-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(180deg,
+      hsl(20 6% 0% / 0.1) 0%,
+      hsl(20 6% 0% / 0.03) 40%,
+      transparent 55%,
+      hsl(20 6% 0% / 0.03) 70%,
+      hsl(20 6% 0% / 0.1) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+    transition: background 0.3s ease;
+  }
+  .dark .glass-border::before {
+    background: linear-gradient(180deg,
+      hsl(0 0% 100% / 0.12) 0%,
+      hsl(0 0% 100% / 0.04) 40%,
+      transparent 55%,
+      hsl(0 0% 100% / 0.04) 70%,
+      hsl(0 0% 100% / 0.12) 100%);
+  }
+
+  /* ── Glass hover — brighten edge ── */
+  .glass-hover {
+    transition: box-shadow 0.3s ease, transform 0.2s ease;
+  }
+  .glass-hover:hover::before {
+    background: linear-gradient(180deg,
+      hsl(20 6% 0% / 0.16) 0%,
+      hsl(20 6% 0% / 0.06) 40%,
+      transparent 55%,
+      hsl(20 6% 0% / 0.06) 70%,
+      hsl(20 6% 0% / 0.16) 100%) !important;
+  }
+  .dark .glass-hover:hover::before {
+    background: linear-gradient(180deg,
+      hsl(0 0% 100% / 0.2) 0%,
+      hsl(0 0% 100% / 0.08) 40%,
+      transparent 55%,
+      hsl(0 0% 100% / 0.08) 70%,
+      hsl(0 0% 100% / 0.2) 100%) !important;
+  }
+  .glass-hover:hover {
+    box-shadow:
+      inset 0 1px 1px hsl(0 0% 100% / 0.15),
+      var(--shadow-elevated);
+  }
+
+  /* ── Signal Glow — focal accent only ── */
+  .signal-glow {
+    box-shadow: var(--shadow-signal);
+  }
+
+  /* ── Signal Gradient Button ── */
+  .btn-signal {
+    background: var(--gradient-signal);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(45, 106, 159, 0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .btn-signal:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(45, 106, 159, 0.35);
+  }
+  .btn-signal:active {
+    transform: translateY(0);
+  }
+
+  /* ── Bottom Gradient Fade ── */
+  .fade-mask {
+    position: relative;
+  }
+  .fade-mask::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3.5rem;
+    background: linear-gradient(to bottom, transparent, hsl(var(--background)));
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+/* =============================================================
+   ENTRANCE ANIMATIONS — restrained, warm
+   ============================================================= */
+@layer utilities {
+  .enter {
+    animation: enter-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--enter-delay, 0ms);
+  }
+  .enter-scale {
+    animation: enter-up-scale 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--enter-delay, 0ms);
+  }
+
+  @keyframes enter-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes enter-up-scale {
+    from { opacity: 0; transform: translateY(14px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
+
+/* ── Tab content fade-in ── */
+[data-state="active"].mt-0 {
+  animation: tab-fade-in 0.25s ease-out;
+}
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
+}
+
+/* ── Citation Badge (inline {ref:N} 引用标签) ── */
+.citation-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1px 5px;
+  margin-left: 2px;
+  border-radius: 3px;
+  background: hsl(var(--success) / 0.12);
+  color: hsl(var(--success));
+  cursor: default;
+  vertical-align: baseline;
+  transition: background 0.15s ease;
+  user-select: none;
+  position: relative;
+  top: -1px;
+}
+.citation-badge:hover {
+  background: hsl(var(--success) / 0.22);
+}
+
+.citation-tooltip {
+  max-width: 320px !important;
+  padding: 10px 12px !important;
+  line-height: 1.6 !important;
+  font-weight: 400 !important;
+}
+
+/* ── Sidebar collapse transition ── */
+.sidebar-transition {
+  transition: width 0.2s ease, transform 0.2s ease;
+  will-change: width, transform;
+}
+
+/* ── Phase transition for Workbench ── */
+.phase-fade-in { animation: fade-in 0.3s ease-out; }
+
+/* ── Drawer form styles ── */
+.drawer-section { display: flex; flex-direction: column; gap: 1rem; }
+.drawer-field { display: flex; flex-direction: column; gap: 0.375rem; }
+.drawer-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.drawer-field .helper {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ── Table row expand ── */
+.row-expand-enter { animation: row-expand 0.2s ease-out; }
+@keyframes row-expand {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 80px; }
+}
+
+/* ── Page transitions ── */
+.page-enter { animation: page-fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Interactive micro-animations ── */
+.interactive {
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+.interactive:hover { transform: scale(1.015); }
+.interactive:active { transform: scale(0.985); }
+
+/* ── Table row hover readability ── */
+tr.cursor-pointer:hover td {
+  color: hsl(var(--foreground));
+}
+tr.cursor-pointer:hover .text-muted-foreground {
+  color: hsl(var(--foreground) / 0.75);
+}
+
+/* ── Sidebar button hover readability ── */
+.bg-sidebar .hover\:bg-accent:hover,
+.bg-sidebar [data-variant="ghost"]:hover {
+  background: hsl(var(--sidebar-accent)) !important;
+  color: hsl(var(--sidebar-foreground)) !important;
+}
+
+/* ── Nav link hover glow (Corporate signal) ── */
+.bg-sidebar a:hover:not([aria-current="page"]) {
+  color: hsl(var(--signal-cyan)) !important;
+}
+
+/* ── Prose CDC — Markdown Article Styles ── */
+.prose-cdc {
+  max-width: none;
+  color: hsl(var(--foreground));
+}
+.prose-cdc h1 { margin-top: 2rem; margin-bottom: 0.75rem; font-size: 1.5rem; font-weight: 600; }
+.prose-cdc h2 { margin-top: 1.75rem; margin-bottom: 0.5rem; font-size: 1.25rem; font-weight: 600; }
+.prose-cdc h3 { margin-top: 1.25rem; margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: 600; }
+.prose-cdc p { line-height: 1.8; margin-bottom: 0.75rem; }
+.prose-cdc ul, .prose-cdc ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+.prose-cdc li { line-height: 1.8; margin-bottom: 0.25rem; }
+.prose-cdc blockquote { border-left: 3px solid hsl(var(--primary) / 0.4); padding-left: 1rem; margin: 1rem 0; font-style: italic; color: hsl(var(--muted-foreground)); background: hsl(var(--accent) / 0.3); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 0.5rem 1rem; }
+.prose-cdc code { font-size: 0.85em; background: hsl(var(--accent) / 0.5); padding: 0.125rem 0.375rem; border-radius: var(--radius-sm); }
+.prose-cdc pre { background: hsl(var(--accent) / 0.5); border-radius: var(--radius-md); padding: 0.75rem 1rem; margin: 1rem 0; overflow-x: auto; }
+.prose-cdc pre code { background: none; padding: 0; font-size: 0.8125rem; }
+.prose-cdc table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.prose-cdc th { background: hsl(var(--primary) / 0.05); border: 1px solid hsl(var(--border)); padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; }
+.prose-cdc td { border: 1px solid hsl(var(--border)); padding: 0.5rem 0.75rem; }
+.prose-cdc tr:nth-child(even) td { background: hsl(var(--muted) / 0.3); }
+.prose-cdc tr:hover td { background: hsl(var(--primary) / 0.03); }
+.prose-cdc hr { border-color: hsl(var(--border)); margin: 1.5rem 0; }
+.prose-cdc a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
+.prose-cdc img { max-width: 100%; border-radius: var(--radius-md); }
+.prose-cdc del { color: hsl(var(--muted-foreground)); }
+.prose-cdc input[type="checkbox"] { margin-right: 0.5rem; }
+.prose-cdc .contains-task-list { list-style: none; padding-left: 0.25rem; }
+.prose-cdc .task-list-item { display: flex; align-items: flex-start; gap: 0.25rem; }
+.prose-cdc .md-image-figure { break-inside: avoid; }
+.prose-cdc .md-image {
+  background: hsl(var(--muted) / 0.35);
+}
+.prose-cdc figure + figure {
+  margin-top: 1.25rem;
+}
+.prose-cdc-outline p {
+  max-width: 72ch;
+}
+
+.page-enter,
+.surface-card,
+.surface-elevated {
+  min-width: 0;
+}
+
+/* highlight.js theme integration */
+.prose-cdc .hljs { background: transparent !important; color: hsl(var(--foreground)); }
+
+/* =============================================================
+   POKER CARD STACK — LLM Config Management
+   ============================================================= */
+
+/* ── Stack Viewport ── */
+.card-stack-viewport {
+  position: relative;
+  min-height: 180px;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.card-stack-container {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+}
+
+/* ── Stack Item ── */
+.card-stack-item {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.card-stack-item.card-stack-top {
+  position: relative;
+  pointer-events: auto;
+}
+
+/* ── Slide transitions ── */
+.card-stack-top.card-slide-left > div {
+  animation: slide-out-left 0.18s ease-in forwards;
+}
+.card-stack-top.card-slide-right > div {
+  animation: slide-out-right 0.18s ease-in forwards;
+}
+
+@keyframes slide-out-left {
+  to { transform: translateX(-30px); opacity: 0; }
+}
+@keyframes slide-out-right {
+  to { transform: translateX(30px); opacity: 0; }
+}
+
+/* ── View enter (edit / add form) ── */
+.card-view-enter {
+  animation: card-view-fade-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes card-view-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Enabled Pulse ── */
+.pulse-enabled {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* =============================================================
+   RESPONSIVE — Mobile-first adjustments
+   ============================================================= */
+
+/* ── Tablet & below (≤768px) ── */
+@media (max-width: 768px) {
+  .prose-cdc {
+    font-size: 0.9375rem;
+  }
+  .prose-cdc h1 { font-size: 1.3rem; }
+  .prose-cdc h2 { font-size: 1.125rem; }
+  .prose-cdc h3 { font-size: 1rem; }
+  .prose-cdc ul, .prose-cdc ol { padding-left: 1.25rem; }
+  .prose-cdc blockquote { padding-left: 0.75rem; margin-left: 0; margin-right: 0; }
+  .prose-cdc pre { padding: 0.5rem 0.75rem; font-size: 0.75rem; }
+  .prose-cdc table { display: block; overflow-x: auto; white-space: nowrap; }
+
+  .card-stack-viewport {
+    min-height: 150px;
+  }
+  .card-stack-container {
+    max-width: 100%;
+  }
+
+  .text-page-title {
+    font-size: 1.375rem;
+  }
+  .text-section-title {
+    font-size: 1rem;
+  }
+}
+
+/* ── Phone (≤480px) ── */
+@media (max-width: 480px) {
+  .prose-cdc p { line-height: 1.7; }
+  .prose-cdc h1 { font-size: 1.2rem; margin-top: 1.5rem; }
+  .prose-cdc h2 { font-size: 1.05rem; margin-top: 1.25rem; }
+
+  .citation-badge {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+
+  .drawer-section {
+    gap: 0.75rem;
+  }
+
+  .card-stack-viewport {
+    min-height: 130px;
+  }
+
+  .surface-card {
+    border-radius: var(--radius-md);
+  }
+}

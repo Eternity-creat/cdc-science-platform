@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcArticleTemplateMapper">
+
+    <!-- 查询所有模板 -->
+    <select id="listAll" resultType="CdcArticleTemplate">
+        SELECT id, template_name, tag, purpose, tone, outline_structure, status, create_time
+        FROM cdc_article_template
+        ORDER BY create_time DESC
+    </select>
+
+    <!-- 分页查询 -->
+    <select id="listPaged" resultType="CdcArticleTemplate">
+        SELECT id, template_name, tag, purpose, tone, outline_structure, status, create_time
+        FROM cdc_article_template
+        ORDER BY create_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 总数 -->
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM cdc_article_template
+    </select>
+
+    <!-- 根据ID查询详情 -->
+    <select id="getById" resultType="CdcArticleTemplate">
+        SELECT id, template_name, tag, purpose, tone, outline_structure, status, create_time
+        FROM cdc_article_template WHERE id = #{id}
+    </select>
+
+    <!-- 新增模板 -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_article_template (template_name, tag, purpose, tone, outline_structure, status, create_time)
+        VALUES (#{templateName}, #{tag}, #{purpose}, #{tone}, #{outlineStructure}, #{status}, NOW())
+    </insert>
+
+    <!-- 修改模板 -->
+    <update id="update">
+        UPDATE cdc_article_template
+        SET template_name = #{templateName},
+            tag = #{tag},
+            purpose = #{purpose},
+            tone = #{tone},
+            outline_structure = #{outlineStructure},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除模板 -->
+    <delete id="delete">
+        DELETE FROM cdc_article_template WHERE id = #{id}
+    </delete>
+
+</mapper>

@@ -1,0 +1,16 @@
+{
+  "case_name": "乙肝疫苗自由文本",
+  "description": "测试自由文本模式的意图解析和文章生成",
+  "article_id": 3,
+  "entity_name": "",
+  "population_name": "",
+  "scene_name": "",
+  "template_name": "",
+  "template_purpose": "",
+  "template_tone": "",
+  "template_outline": "",
+  "word_count": 800,
+  "step": "outline",
+  "mode": 2,
+  "user_text": "我想了解一下乙肝疫苗对儿童的作用和接种注意事项"
+}

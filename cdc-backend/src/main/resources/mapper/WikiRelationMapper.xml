@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.WikiRelationMapper">
+    <select id="listByFromEid" resultType="WikiRelation">
+        SELECT * FROM wiki_relation WHERE from_eid=#{fromEid}
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO wiki_relation(from_eid,to_eid,rel_type) VALUES(#{fromEid},#{toEid},#{relType})
+    </insert>
+    <update id="update">
+        UPDATE wiki_relation SET from_eid=#{fromEid}, to_eid=#{toEid}, rel_type=#{relType} WHERE id=#{id}
+    </update>
+    <delete id="delete">
+        DELETE FROM wiki_relation WHERE id=#{id}
+    </delete>
+    <delete id="deleteByFromEid">
+        DELETE FROM wiki_relation WHERE from_eid=#{fromEid}
+    </delete>
+    <delete id="deleteByToEid">
+        DELETE FROM wiki_relation WHERE to_eid=#{toEid}
+    </delete>
+</mapper>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcArticleImageMapper">
+
+    <resultMap id="BaseResultMap" type="com.cdc.cdcbackend.entity.CdcArticleImage">
+        <id column="id" property="id"/>
+        <result column="article_id" property="articleId"/>
+        <result column="image_key" property="imageKey"/>
+        <result column="file_path" property="filePath"/>
+        <result column="caption" property="caption"/>
+        <result column="position" property="position"/>
+        <result column="generated_by" property="generatedBy"/>
+        <result column="generation_prompt" property="generationPrompt"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="listByArticleId" resultMap="BaseResultMap">
+        SELECT * FROM cdc_article_image
+        WHERE article_id = #{articleId} AND status = 1
+        ORDER BY position, id
+    </select>
+
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT * FROM cdc_article_image WHERE id = #{id}
+    </select>
+
+    <select id="getByKey" resultMap="BaseResultMap">
+        SELECT * FROM cdc_article_image
+        WHERE article_id = #{articleId} AND image_key = #{imageKey}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO cdc_article_image
+            (article_id, image_key, file_path, caption, position, generated_by, generation_prompt, width, height, file_size, status, created_at, updated_at)
+        VALUES
+            (#{articleId}, #{imageKey}, #{filePath}, #{caption}, #{position}, #{generatedBy}, #{generationPrompt}, #{width}, #{height}, #{fileSize}, #{status}, NOW(), NOW())
+    </insert>
+
+    <update id="update">
+        UPDATE cdc_article_image
+        SET image_key = #{imageKey}, file_path = #{filePath}, caption = #{caption},
+            position = #{position}, generated_by = #{generatedBy}, generation_prompt = #{generationPrompt},
+            width = #{width}, height = #{height}, file_size = #{fileSize}, status = #{status},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="delete">
+        UPDATE cdc_article_image SET status = 0 WHERE id = #{id}
+    </update>
+
+    <update id="deleteByArticleId">
+        UPDATE cdc_article_image SET status = 0 WHERE article_id = #{articleId}
+    </update>
+
+</mapper>

@@ -1,0 +1,16 @@
+{
+  "case_name": "新冠病毒科普文章",
+  "description": "测试新冠病毒对老年人群体的科普文章生成",
+  "article_id": 2,
+  "entity_name": "新冠病毒",
+  "population_name": "老年人",
+  "scene_name": "疾病预防",
+  "template_name": "标准科普模板",
+  "template_purpose": "科普宣教，普及疫情防控知识",
+  "template_tone": "专业、温和、通俗易懂",
+  "template_outline": "1.概述\n2.易感人群\n3.预防措施\n4.注意事项",
+  "word_count": 800,
+  "step": "outline",
+  "mode": 1,
+  "user_text": ""
+}

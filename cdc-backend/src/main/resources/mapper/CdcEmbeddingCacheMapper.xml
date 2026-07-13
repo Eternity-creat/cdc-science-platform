@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cdc.cdcbackend.mapper.CdcEmbeddingCacheMapper">
+
+    <resultMap id="BaseResultMap" type="com.cdc.cdcbackend.entity.CdcEmbeddingCache">
+        <id column="id" property="id"/>
+        <result column="content_hash" property="contentHash"/>
+        <result column="embedding" property="embedding"/>
+        <result column="model_version" property="modelVersion"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_id" property="sourceId"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="getByHashAndModel" resultMap="BaseResultMap">
+        SELECT * FROM cdc_embedding_cache
+        WHERE content_hash = #{contentHash} AND model_version = #{modelVersion}
+        LIMIT 1
+    </select>
+
+    <select id="listByHashesAndModel" resultMap="BaseResultMap">
+        SELECT * FROM cdc_embedding_cache
+        WHERE model_version = #{modelVersion}
+        AND content_hash IN
+        <foreach collection="hashes" item="h" open="(" separator="," close=")">
+            #{h}
+        </foreach>
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO cdc_embedding_cache (content_hash, embedding, model_version, source_type, source_id, created_at)
+        VALUES (#{contentHash}, #{embedding}, #{modelVersion}, #{sourceType}, #{sourceId}, NOW())
+        ON DUPLICATE KEY UPDATE
+            embedding = VALUES(embedding),
+            source_type = VALUES(source_type),
+            source_id = VALUES(source_id)
+    </insert>
+
+</mapper>
