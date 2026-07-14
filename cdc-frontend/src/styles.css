@@ -514,30 +514,75 @@
 .citation-badge {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
-  padding: 1px 5px;
+  padding: 2px 7px 2px 5px;
   margin-left: 2px;
-  border-radius: 3px;
-  background: hsl(var(--success) / 0.12);
+  border-radius: 10px;
+  background: hsl(var(--success) / 0.1);
   color: hsl(var(--success));
+  border: 1px solid hsl(var(--success) / 0.18);
   cursor: default;
   vertical-align: baseline;
-  transition: background 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   position: relative;
   top: -1px;
 }
+.citation-badge .citation-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
 .citation-badge:hover {
-  background: hsl(var(--success) / 0.22);
+  background: hsl(var(--success) / 0.18);
+  border-color: hsl(var(--success) / 0.35);
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px hsl(var(--success) / 0.08);
+}
+.citation-badge:hover .citation-icon {
+  opacity: 1;
 }
 
+/* ── Citation Tooltip ── */
 .citation-tooltip {
-  max-width: 320px !important;
-  padding: 10px 12px !important;
-  line-height: 1.6 !important;
-  font-weight: 400 !important;
+  max-width: 340px !important;
+  padding: 0 !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-left: 3px solid hsl(var(--success)) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden !important;
+}
+.citation-source {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.4);
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  letter-spacing: 0.01em;
+}
+.citation-source svg {
+  flex-shrink: 0;
+  color: hsl(var(--success));
+}
+.citation-content {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+.citation-fallback {
+  padding: 10px 12px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  margin: 0;
 }
 
 /* ── Sidebar collapse transition ── */
@@ -760,7 +805,8 @@ tr.cursor-pointer:hover .text-muted-foreground {
 
   .citation-badge {
     font-size: 10px;
-    padding: 1px 4px;
+    padding: 1px 5px 1px 4px;
+    border-radius: 8px;
   }
 
   .drawer-section {
