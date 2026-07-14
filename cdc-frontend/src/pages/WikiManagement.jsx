@@ -964,9 +964,12 @@ export default function WikiManagement() {
           Import Dialog
          ======================== */}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>导入知识文件</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload size={18} className="text-primary" />
+              导入知识文件
+            </DialogTitle>
             <DialogDescription>
               支持 JSON、Markdown、TXT、DOCX、PDF 格式，上传后预览解析结果再确认入库。
             </DialogDescription>
@@ -982,75 +985,119 @@ export default function WikiManagement() {
 
           {!importPreview && !importLoading && (
             <div
-              className="border-2 border-dashed border-border rounded-lg py-10 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors"
+              className="border-2 border-dashed border-border rounded-xl py-16 flex flex-col items-center gap-4 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.03] transition-colors"
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload size={28} className="text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">点击选择文件或拖拽到此处</p>
-              <p className="text-xs text-muted-foreground/60">JSON / MD / TXT / DOCX / PDF</p>
+              <div className="h-14 w-14 rounded-full bg-primary/8 flex items-center justify-center">
+                <Upload size={24} className="text-primary/60" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground/80">点击选择文件</p>
+                <p className="text-xs text-muted-foreground mt-1">JSON / Markdown / TXT / DOCX / PDF</p>
+              </div>
             </div>
           )}
 
           {importLoading && (
-            <div className="flex flex-col items-center gap-3 py-10">
-              <Loader2 size={28} className="animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">正在解析 {importFile?.name} ...</p>
+            <div className="flex flex-col items-center gap-4 py-16">
+              <Loader2 size={32} className="animate-spin text-primary" />
+              <div className="text-center">
+                <p className="text-sm font-medium">正在解析文件</p>
+                <p className="text-xs text-muted-foreground mt-1">{importFile?.name}</p>
+              </div>
             </div>
           )}
 
           {importPreview && (
-            <div className="space-y-4">
-              {/* Summary bar */}
-              <div className="flex items-center gap-3 text-sm">
-                <Badge variant="outline" className="font-mono">{importPreview.fileType?.toUpperCase()}</Badge>
-                <span className="font-medium truncate flex-1">{importPreview.fileName}</span>
+            <div className="space-y-5 flex-1 overflow-hidden flex flex-col">
+              {/* File info header */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-muted/30 border border-border/50">
+                <FileText size={18} className="text-muted-foreground shrink-0" />
+                <span className="font-medium text-sm truncate flex-1">{importPreview.fileName}</span>
+                <Badge variant="outline" className="font-mono text-[10px] shrink-0">{importPreview.fileType?.toUpperCase()}</Badge>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
-                  <p className="text-lg font-semibold">{importPreview.entityCount || 0}</p>
-                  <p className="text-[10px] text-muted-foreground">实体</p>
+              {/* Stats cards */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border border-border/60 px-4 py-3 text-center bg-card">
+                  <p className="text-2xl font-bold text-primary">{importPreview.entityCount || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">知识实体</p>
                 </div>
-                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
-                  <p className="text-lg font-semibold">{importPreview.segmentCount || 0}</p>
-                  <p className="text-[10px] text-muted-foreground">知识片段</p>
+                <div className="rounded-lg border border-border/60 px-4 py-3 text-center bg-card">
+                  <p className="text-2xl font-bold text-primary">{importPreview.segmentCount || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">知识片段</p>
                 </div>
-                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
-                  <p className="text-lg font-semibold">{importPreview.ruleCount || 0}</p>
-                  <p className="text-[10px] text-muted-foreground">约束规则</p>
+                <div className="rounded-lg border border-border/60 px-4 py-3 text-center bg-card">
+                  <p className="text-2xl font-bold text-primary">{importPreview.ruleCount || 0}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">约束规则</p>
                 </div>
               </div>
 
               {/* Warnings */}
               {importPreview.warnings?.length > 0 && (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 space-y-0.5">
-                  {importPreview.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-700 space-y-1">
+                  {importPreview.warnings.map((w, i) => <p key={i} className="flex items-start gap-1.5"><span className="shrink-0">⚠</span>{w}</p>)}
                 </div>
               )}
 
               {/* Entity list */}
               {importPreview.entities?.length > 0 && (
-                <ScrollArea className="max-h-[220px]">
-                  <div className="space-y-2 pr-2">
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="space-y-3 pr-3">
                     {importPreview.entities.map((ent, i) => {
                       const ti = getTypeInfo(ent.entityType);
                       return (
-                        <Card key={i}>
-                          <CardContent className="p-3">
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <Badge variant="outline" className={cn('text-micro', ti.color)}>{ti.label}</Badge>
-                              <span className="text-sm font-medium">{ent.stdName}</span>
-                              {ent.alias && <span className="text-xs text-muted-foreground truncate">({ent.alias})</span>}
+                        <div key={i} className="rounded-lg border border-border/60 overflow-hidden">
+                          {/* Entity header */}
+                          <div className="px-4 py-3 bg-muted/20 border-b border-border/40">
+                            <div className="flex items-center gap-2.5">
+                              <Badge variant="outline" className={cn('text-micro font-medium', ti.color)}>{ti.label}</Badge>
+                              <span className="text-sm font-semibold">{ent.stdName}</span>
                             </div>
-                            {ent.summary && (
-                              <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{ent.summary}</p>
+                            {ent.alias && (
+                              <p className="text-xs text-muted-foreground mt-1">别名：{ent.alias}</p>
                             )}
-                            <div className="flex gap-3 mt-1.5 text-[10px] text-muted-foreground">
-                              <span>{ent.segments?.length || 0} 条片段</span>
-                              <span>{ent.rules?.length || 0} 条规则</span>
-                            </div>
-                          </CardContent>
-                        </Card>
+                          </div>
+                          {/* Entity body */}
+                          <div className="px-4 py-3 space-y-3">
+                            {ent.summary && (
+                              <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2">{ent.summary}</p>
+                            )}
+                            {/* Segments preview */}
+                            {ent.segments?.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                  知识片段 ({ent.segments.length})
+                                </p>
+                                <div className="space-y-1.5 max-h-[100px] overflow-hidden">
+                                  {ent.segments.slice(0, 3).map((seg, si) => (
+                                    <div key={si} className="text-[11px] text-foreground/70 leading-relaxed line-clamp-2 pl-2 border-l-2 border-primary/20">
+                                      {seg.content}
+                                    </div>
+                                  ))}
+                                  {ent.segments.length > 3 && (
+                                    <p className="text-[10px] text-muted-foreground pl-2">
+                                      还有 {ent.segments.length - 3} 条片段...
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {/* Rules preview */}
+                            {ent.rules?.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {ent.rules.map((rule, ri) => {
+                                  const rt = RULE_TYPE_MAP[rule.ruleType] || RULE_TYPE_MAP.MustInclude;
+                                  return (
+                                    <Badge key={ri} variant="outline" className={cn('text-[10px] font-normal', rt.className)}>
+                                      {rt.label}：{rule.content.length > 15 ? rule.content.slice(0, 15) + '...' : rule.content}
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1059,7 +1106,7 @@ export default function WikiManagement() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="mt-2">
             <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
             {importPreview && (
               <Button onClick={handleConfirmImport} disabled={importConfirming}>

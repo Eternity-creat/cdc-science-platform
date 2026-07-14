@@ -30,6 +30,9 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 # 安装 curl（健康检查用）
 RUN apk add --no-cache curl
 
+# 创建上传目录（wiki 导入、文件上传）并赋权给 appuser
+RUN mkdir -p /app/uploads/wiki && chown -R appuser:appgroup /app/uploads
+
 # 从构建阶段复制 JAR
 COPY --from=builder /build/target/*.jar app.jar
 
