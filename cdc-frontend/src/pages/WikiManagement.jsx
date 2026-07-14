@@ -104,6 +104,14 @@ export default function WikiManagement() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Import dialog
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importConfirming, setImportConfirming] = useState(false);
+  const fileInputRef = useRef(null);
+
   const fetchEntities = async (p = page) => {
     setLoading(true);
     try {
@@ -401,7 +409,50 @@ export default function WikiManagement() {
     }
   };
 
-  const handleImport = () => { toast.info('功能开发中'); };
+  // ── Import handlers ──
+  const handleImport = () => {
+    setImportOpen(true);
+    setImportFile(null);
+    setImportPreview(null);
+    setImportLoading(false);
+    setImportConfirming(false);
+  };
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportLoading(true);
+    try {
+      const res = await wikiApi.uploadWikiDocument(file);
+      setImportPreview(res);
+    } catch (err) {
+      console.error('文件解析失败:', err);
+      toast.error('文件解析失败', { description: err.message || '请检查文件格式' });
+    } finally {
+      setImportLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importPreview?.taskId) return;
+    setImportConfirming(true);
+    try {
+      const res = await wikiApi.confirmUpload(importPreview.taskId);
+      toast.success('导入成功', {
+        description: `新增 ${res.insertedCount} 个实体，${res.segmentCount} 条知识片段${res.overwrittenCount > 0 ? `，覆盖 ${res.overwrittenCount} 个已有实体` : ''}`,
+      });
+      setImportOpen(false);
+      setPage(1);
+      await fetchEntities(1);
+    } catch (err) {
+      console.error('导入失败:', err);
+      toast.error('导入失败', { description: err.message || '请重试' });
+    } finally {
+      setImportConfirming(false);
+    }
+  };
 
   return (
     <div className="flex h-full overflow-hidden page-enter">
@@ -905,6 +956,117 @@ export default function WikiManagement() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>取消</Button>
             <Button variant="destructive" onClick={handleDeleteEntity}>删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ========================
+          Import Dialog
+         ======================== */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>导入知识文件</DialogTitle>
+            <DialogDescription>
+              支持 JSON、Markdown、TXT、DOCX、PDF 格式，上传后预览解析结果再确认入库。
+            </DialogDescription>
+          </DialogHeader>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.md,.txt,.docx,.pdf"
+            className="hidden"
+            onChange={handleFileSelected}
+          />
+
+          {!importPreview && !importLoading && (
+            <div
+              className="border-2 border-dashed border-border rounded-lg py-10 flex flex-col items-center gap-3 cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload size={28} className="text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">点击选择文件或拖拽到此处</p>
+              <p className="text-xs text-muted-foreground/60">JSON / MD / TXT / DOCX / PDF</p>
+            </div>
+          )}
+
+          {importLoading && (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <Loader2 size={28} className="animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">正在解析 {importFile?.name} ...</p>
+            </div>
+          )}
+
+          {importPreview && (
+            <div className="space-y-4">
+              {/* Summary bar */}
+              <div className="flex items-center gap-3 text-sm">
+                <Badge variant="outline" className="font-mono">{importPreview.fileType?.toUpperCase()}</Badge>
+                <span className="font-medium truncate flex-1">{importPreview.fileName}</span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
+                  <p className="text-lg font-semibold">{importPreview.entityCount || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">实体</p>
+                </div>
+                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
+                  <p className="text-lg font-semibold">{importPreview.segmentCount || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">知识片段</p>
+                </div>
+                <div className="rounded-md bg-muted/40 px-3 py-2 text-center">
+                  <p className="text-lg font-semibold">{importPreview.ruleCount || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">约束规则</p>
+                </div>
+              </div>
+
+              {/* Warnings */}
+              {importPreview.warnings?.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 space-y-0.5">
+                  {importPreview.warnings.map((w, i) => <p key={i}>{w}</p>)}
+                </div>
+              )}
+
+              {/* Entity list */}
+              {importPreview.entities?.length > 0 && (
+                <ScrollArea className="max-h-[220px]">
+                  <div className="space-y-2 pr-2">
+                    {importPreview.entities.map((ent, i) => {
+                      const ti = getTypeInfo(ent.entityType);
+                      return (
+                        <Card key={i}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <Badge variant="outline" className={cn('text-micro', ti.color)}>{ti.label}</Badge>
+                              <span className="text-sm font-medium">{ent.stdName}</span>
+                              {ent.alias && <span className="text-xs text-muted-foreground truncate">({ent.alias})</span>}
+                            </div>
+                            {ent.summary && (
+                              <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">{ent.summary}</p>
+                            )}
+                            <div className="flex gap-3 mt-1.5 text-[10px] text-muted-foreground">
+                              <span>{ent.segments?.length || 0} 条片段</span>
+                              <span>{ent.rules?.length || 0} 条规则</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>取消</Button>
+            {importPreview && (
+              <Button onClick={handleConfirmImport} disabled={importConfirming}>
+                {importConfirming && <Loader2 size={14} className="mr-1.5 animate-spin" />}
+                确认导入
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
