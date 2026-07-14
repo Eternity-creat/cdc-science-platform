@@ -3,17 +3,9 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './ui/t
 /**
  * CitationBadge - 行内知识引用标签
  *
- * 在文章正文中渲染 {ref:N} 为带图标的引用标签，
+ * 在文章正文中渲染 {ref:N} 为序号标签，
  * hover 时弹出 Tooltip 显示对应知识片段内容和来源。
  */
-function QuoteIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className="citation-icon">
-      <path d="M3.5 3C1.57 3 0 4.57 0 6.5c0 1.63 1.12 3 2.63 3.38-.13.88-.63 1.75-1.38 2.37a.5.5 0 00.63.78C3.38 11.88 4.5 10.13 4.5 8V6.5A1.5 1.5 0 003 5h-.5a.5.5 0 010-1H3c.28 0 .5.22.5.5zM10.5 3C8.57 3 7 4.57 7 6.5c0 1.63 1.12 3 2.63 3.38-.13.88-.63 1.75-1.38 2.37a.5.5 0 00.63.78C10.38 11.88 11.5 10.13 11.5 8V6.5A1.5 1.5 0 0010 5h-.5a.5.5 0 010-1H10c.28 0 .5.22.5.5z"/>
-    </svg>
-  );
-}
-
 export default function CitationBadge({ index, segments }) {
   const seg = segments && segments[index - 1];
 
@@ -21,10 +13,7 @@ export default function CitationBadge({ index, segments }) {
     <TooltipProvider delayDuration={200} skipDelayDuration={100}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="citation-badge">
-            <QuoteIcon />
-            <span>原文</span>
-          </span>
+          <span className="citation-badge">{index}</span>
         </TooltipTrigger>
         <TooltipContent
           side="top"

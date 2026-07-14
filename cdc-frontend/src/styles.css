@@ -510,39 +510,34 @@
   background: hsl(var(--muted-foreground) / 0.4);
 }
 
-/* ── Citation Badge (inline {ref:N} 引用标签) ── */
+/* ── Citation Badge (inline {ref:N} 引用序号标签) ── */
 .citation-badge {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  font-size: 11px;
+  justify-content: center;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
-  padding: 2px 7px 2px 5px;
-  margin-left: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 1px;
   border-radius: 10px;
   background: hsl(var(--success) / 0.1);
   color: hsl(var(--success));
   border: 1px solid hsl(var(--success) / 0.18);
-  cursor: default;
+  cursor: pointer;
   vertical-align: baseline;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   position: relative;
-  top: -1px;
-}
-.citation-badge .citation-icon {
-  opacity: 0.7;
-  flex-shrink: 0;
+  top: -2px;
 }
 .citation-badge:hover {
   background: hsl(var(--success) / 0.18);
   border-color: hsl(var(--success) / 0.35);
-  transform: scale(1.08);
+  transform: scale(1.12);
   box-shadow: 0 0 0 3px hsl(var(--success) / 0.08);
-}
-.citation-badge:hover .citation-icon {
-  opacity: 1;
 }
 
 /* ── Citation Tooltip ── */
@@ -804,9 +799,10 @@ tr.cursor-pointer:hover .text-muted-foreground {
   .prose-cdc h2 { font-size: 1.05rem; margin-top: 1.25rem; }
 
   .citation-badge {
-    font-size: 10px;
-    padding: 1px 5px 1px 4px;
-    border-radius: 8px;
+    font-size: 9px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
   }
 
   .drawer-section {

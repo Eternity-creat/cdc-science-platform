@@ -863,7 +863,11 @@ export default function Workbench() {
                 <ScrollArea ref={draftPreviewScrollRef} className="h-full">
                   <div className="mx-auto max-w-[72ch] px-8 py-6">
                     {editDraft || draftText ? (
-                      <MarkdownRenderer content={editDraft || draftText} segments={context?.segments} />
+                      <MarkdownRenderer
+                        key={context?.segments ? 'has-segments' : 'no-segments'}
+                        content={editDraft || draftText}
+                        segments={context?.segments}
+                      />
                     ) : (
                       <p className="text-sm text-muted-foreground">暂无初稿内容</p>
                     )}
@@ -971,7 +975,11 @@ export default function Workbench() {
               <ScrollArea ref={finalPreviewScrollRef} className="h-full">
                 <div className="mx-auto max-w-[65ch] px-8 py-6">
                   {(finalText || draftText) ? (
-                    <MarkdownRenderer content={finalText || draftText} segments={context?.segments} />
+                    <MarkdownRenderer
+                      key={context?.segments ? 'has-segments' : 'no-segments'}
+                      content={finalText || draftText}
+                      segments={context?.segments}
+                    />
                   ) : (
                     <div className="py-16 text-center text-muted-foreground">
                       <Loader2 size={20} className="animate-spin mx-auto mb-3" />
@@ -1036,7 +1044,11 @@ export default function Workbench() {
             </div>
             <ScrollArea ref={modalPreviewScrollRef} className="h-[calc(85vh-48px)]">
               <div className="mx-auto max-w-[65ch] px-8 py-6">
-                <MarkdownRenderer content={finalText || draftText} segments={context?.segments} />
+                <MarkdownRenderer
+                  key={context?.segments ? 'has-segments' : 'no-segments'}
+                  content={finalText || draftText}
+                  segments={context?.segments}
+                />
               </div>
             </ScrollArea>
           </div>
