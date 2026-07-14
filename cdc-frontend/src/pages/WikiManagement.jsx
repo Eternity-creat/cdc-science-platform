@@ -1061,25 +1061,20 @@ export default function WikiManagement() {
                           {/* Entity body */}
                           <div className="px-4 py-3 space-y-3">
                             {ent.summary && (
-                              <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2">{ent.summary}</p>
+                              <p className="text-[12px] text-muted-foreground leading-relaxed">{ent.summary}</p>
                             )}
                             {/* Segments preview */}
                             {ent.segments?.length > 0 && (
                               <div>
-                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                                   知识片段 ({ent.segments.length})
                                 </p>
-                                <div className="space-y-1.5 max-h-[100px] overflow-hidden">
-                                  {ent.segments.slice(0, 3).map((seg, si) => (
-                                    <div key={si} className="text-[11px] text-foreground/70 leading-relaxed line-clamp-2 pl-2 border-l-2 border-primary/20">
+                                <div className="space-y-2">
+                                  {ent.segments.map((seg, si) => (
+                                    <div key={si} className="text-[11px] text-foreground/70 leading-relaxed line-clamp-1 pl-2 border-l-2 border-primary/20">
                                       {seg.content}
                                     </div>
                                   ))}
-                                  {ent.segments.length > 3 && (
-                                    <p className="text-[10px] text-muted-foreground pl-2">
-                                      还有 {ent.segments.length - 3} 条片段...
-                                    </p>
-                                  )}
                                 </div>
                               </div>
                             )}
@@ -1090,7 +1085,7 @@ export default function WikiManagement() {
                                   const rt = RULE_TYPE_MAP[rule.ruleType] || RULE_TYPE_MAP.MustInclude;
                                   return (
                                     <Badge key={ri} variant="outline" className={cn('text-[10px] font-normal', rt.className)}>
-                                      {rt.label}：{rule.content.length > 15 ? rule.content.slice(0, 15) + '...' : rule.content}
+                                      {rt.label}：{rule.content.length > 25 ? rule.content.slice(0, 25) + '...' : rule.content}
                                     </Badge>
                                   );
                                 })}
