@@ -44,7 +44,7 @@ echo "$CHANGED_FILES" | grep -q "^cdc-agent/"    && add_service "agent"    || tr
 echo "$CHANGED_FILES" | grep -qE "^(deploy/|db/)" && add_service "_all"    || true
 
 # ── 3. 执行部署 ──
-if [ "$SERVICES" = "_all" ]; then
+if [[ "$SERVICES" == *"_all"* ]]; then
     echo "[DEPLOY] 全量构建 (deploy/ 或 db/ 变更)"
     docker compose up -d --build
 elif [ -z "$SERVICES" ]; then
