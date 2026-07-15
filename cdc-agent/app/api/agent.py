@@ -12,6 +12,7 @@ from app.skills.flow.section_analyze_skill import SectionAnalyzeSkill
 from app.skills.flow.image_generate_skill import ImageGenerateSkill
 from app.tools.vector_store import VectorStore
 from app.core.config import settings
+from app.core.streaming import ParagraphStreamBuffer
 from loguru import logger
 from pathlib import Path
 import uuid
@@ -216,19 +217,16 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def _split_stream_chunks(text: str, chunk_size: int = 24):
+def _split_stream_chunks(text: str):
     """按自然边界切分文本，避免一次性把大篇幅内容塞给前端。"""
     if not text:
         return
 
-    buffer = ""
-    for char in text:
-        buffer += char
-        if char in "\n。！？；;,.，、" or len(buffer) >= chunk_size:
-            yield buffer
-            buffer = ""
-    if buffer:
-        yield buffer
+    buffer = ParagraphStreamBuffer()
+    yield from buffer.push(text)
+    remaining = buffer.flush()
+    if remaining:
+        yield remaining
 
 
 @router.post("/generate/stream")
@@ -287,11 +285,15 @@ async def generate_stream(request: AgentRequest):
                 for chunk in _split_stream_chunks(content):
                     full_text += chunk
                     yield _sse("delta", {"delta": chunk})
+                    await asyncio.sleep(0.08)
             elif full_text != content and content.startswith(full_text):
                 tail = content[len(full_text):]
                 if tail:
                     full_text += tail
                     yield _sse("delta", {"delta": tail})
+            elif full_text != content:
+                full_text = content
+                yield _sse("replace", {"content": full_text})
             else:
                 full_text = content
 

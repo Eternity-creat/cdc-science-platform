@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
-  RefreshCw, RotateCcw, AlertTriangle, X, List
+  RefreshCw, RotateCcw, AlertTriangle, X, List, Search
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../components/ui/button.jsx';
@@ -18,7 +18,7 @@ import Pipeline from '../components/Pipeline.jsx';
 import MarkdownRenderer from '../components/MarkdownRenderer.jsx';
 import ImageGallery from '../components/ImageGallery.jsx';
 import OutlineNavigator from '../components/OutlineNavigator.jsx';
-import { buildImageMarkdown } from '../lib/content.js';
+import { buildImageMarkdown, insertMarkdownAtSuggestedSection } from '../lib/content.js';
 import * as articleApi from '../api/article.js';
 
 /* ===== Status Map (aligned with backend 1-5) ===== */
@@ -39,6 +39,14 @@ const OPERATION_LABELS = {
 
 function getStatusInfo(status) {
   return STATUS_MAP[status] || { label: '未知', variant: 'secondary' };
+}
+
+function getGenerationErrorDescription(error) {
+  const message = String(error?.message || error || '');
+  if (/API Key|api key|invalid_api_key|401|403|Forbidden/i.test(message)) {
+    return '文本生成模型认证失败。请到「LLM 配置」里的「文章生成」配置，更新有效 API Key；如果使用工作空间 key，请同时填写匹配的 Base URL。';
+  }
+  return message || '请重试';
 }
 
 /* ===== Helpers ===== */
@@ -80,9 +88,56 @@ function parseModifications(modList) {
     type: m.modifyType || 'outline',
     operationType: m.operationType || 'manual_edit',
     time: m.modifyTime ? m.modifyTime.replace('T', ' ').slice(0, 19) : '',
-    before: m.beforeContent ? m.beforeContent.slice(0, 80) : '',
-    after: m.afterContent ? m.afterContent.slice(0, 80) : '',
+    before: m.beforeContent || '',
+    after: m.afterContent || '',
+    previewBefore: makeContentPreview(m.beforeContent || ''),
+    previewAfter: makeContentPreview(m.afterContent || ''),
+    summary: summarizeModification(m.beforeContent || '', m.afterContent || ''),
   }));
+}
+
+function makeContentPreview(content, max = 90) {
+  const text = String(content || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function normalizeDiffLines(content) {
+  return String(content || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function changedLines(before = '', after = '', limit = 8) {
+  const beforeLines = normalizeDiffLines(before);
+  const afterLines = normalizeDiffLines(after);
+  const afterSet = new Set(afterLines);
+  const beforeSet = new Set(beforeLines);
+  return {
+    removed: beforeLines.filter(line => !afterSet.has(line)).slice(0, limit),
+    added: afterLines.filter(line => !beforeSet.has(line)).slice(0, limit),
+  };
+}
+
+function summarizeModification(before = '', after = '') {
+  const beforeText = String(before || '');
+  const afterText = String(after || '');
+  const beforeLines = normalizeDiffLines(beforeText);
+  const afterLines = normalizeDiffLines(afterText);
+  const afterSet = new Set(afterLines);
+  const beforeSet = new Set(beforeLines);
+  const removedCount = beforeLines.filter(line => !afterSet.has(line)).length;
+  const addedCount = afterLines.filter(line => !beforeSet.has(line)).length;
+  return {
+    beforeChars: beforeText.length,
+    afterChars: afterText.length,
+    deltaChars: afterText.length - beforeText.length,
+    beforeLines: beforeLines.length,
+    afterLines: afterLines.length,
+    removedLines: removedCount,
+    addedLines: addedCount,
+  };
 }
 
 /* ===== Outline Tree Item ===== */
@@ -290,13 +345,17 @@ export default function Workbench() {
 
   /* ===== Action handlers ===== */
 
-  const runStreamedGeneration = useCallback(async (label, request) => {
+  const runStreamedGeneration = useCallback(async (label, request, onStreamText) => {
     setGenerating(true);
     setGeneratingLabel(label);
     setStreamingText('');
     try {
       return await request({
-        onChunk: (text) => setStreamingText(text),
+        onChunk: async (text) => {
+          setStreamingText(text);
+          onStreamText?.(text);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        },
       });
     } finally {
       setGenerating(false);
@@ -308,9 +367,15 @@ export default function Workbench() {
   const handleGenerateOutline = async () => {
     setGenerating(true);
     setGeneratingLabel('正在生成大纲');
+    setEditOutline('');
+    setOutlineItems([]);
     try {
       const result = await runStreamedGeneration('正在生成大纲', (options) =>
-        articleApi.generateOutlineStream(id, options)
+        articleApi.generateOutlineStream(id, options),
+        (text) => {
+          setEditOutline(text);
+          setOutlineItems(parseOutlineToTree(text));
+        }
       );
       if (result) {
         setOutline(result);
@@ -327,7 +392,7 @@ export default function Workbench() {
       }
     } catch (e) {
       console.error('生成大纲失败:', e);
-      toast.error('生成大纲失败', { description: e.message || '请重试' });
+      toast.error('生成大纲失败', { description: getGenerationErrorDescription(e) });
     } finally {
       setGenerating(false);
       setGeneratingLabel('');
@@ -344,9 +409,15 @@ export default function Workbench() {
         setConfirmDialog(null);
         setGenerating(true);
         setGeneratingLabel('正在重新生成大纲');
+        setEditOutline('');
+        setOutlineItems([]);
         try {
           const result = await runStreamedGeneration('正在重新生成大纲', (options) =>
-            articleApi.regenerateOutlineStream(id, options)
+            articleApi.regenerateOutlineStream(id, options),
+            (text) => {
+              setEditOutline(text);
+              setOutlineItems(parseOutlineToTree(text));
+            }
           );
           if (result) {
             setOutline(result);
@@ -361,7 +432,7 @@ export default function Workbench() {
           }
         } catch (e) {
           console.error('重新生成大纲失败:', e);
-          toast.error('重新生成大纲失败', { description: e.message || '请重试' });
+          toast.error('重新生成大纲失败', { description: getGenerationErrorDescription(e) });
         } finally {
           setGenerating(false);
           setGeneratingLabel('');
@@ -403,9 +474,17 @@ export default function Workbench() {
     // Then generate draft
     setGenerating(true);
     setGeneratingLabel('正在生成初稿');
+    setDraftText('');
+    setEditDraft('');
+    setEditorTab('preview');
+    setArticle(prev => prev ? { ...prev, status: 3, initialDraft: '' } : prev);
     try {
       const result = await runStreamedGeneration('正在生成初稿', (options) =>
-        articleApi.generateDraftStream(id, options)
+        articleApi.generateDraftStream(id, options),
+        (text) => {
+          setDraftText(text);
+          setEditDraft(text);
+        }
       );
       if (result) {
         setDraftText(result);
@@ -422,7 +501,7 @@ export default function Workbench() {
       }
     } catch (e) {
       console.error('生成初稿失败:', e);
-      toast.error('生成初稿失败', { description: e.message || '请重试' });
+      toast.error('生成初稿失败', { description: getGenerationErrorDescription(e) });
     } finally {
       setGenerating(false);
       setGeneratingLabel('');
@@ -439,9 +518,16 @@ export default function Workbench() {
         setConfirmDialog(null);
         setGenerating(true);
         setGeneratingLabel('正在重新生成初稿');
+        setDraftText('');
+        setEditDraft('');
+        setEditorTab('preview');
         try {
           const result = await runStreamedGeneration('正在重新生成初稿', (options) =>
-            articleApi.regenerateDraftStream(id, options)
+            articleApi.regenerateDraftStream(id, options),
+            (text) => {
+              setDraftText(text);
+              setEditDraft(text);
+            }
           );
           if (result) {
             setDraftText(result);
@@ -455,7 +541,7 @@ export default function Workbench() {
           }
         } catch (e) {
           console.error('重新生成初稿失败:', e);
-          toast.error('重新生成初稿失败', { description: e.message || '请重试' });
+          toast.error('重新生成初稿失败', { description: getGenerationErrorDescription(e) });
         } finally {
           setGenerating(false);
           setGeneratingLabel('');
@@ -558,6 +644,15 @@ export default function Workbench() {
   const insertImageToDraft = useCallback((img, options = {}) => {
     if (!img?.filePath) return;
     const markdown = buildImageMarkdown(img, options);
+    if (options.insertAt === 'section') {
+      const inserted = insertMarkdownAtSuggestedSection(editDraft, markdown, img);
+      if (inserted.matched) {
+        setEditDraft(inserted.content);
+        scheduleAutoSave('initial_draft', inserted.content);
+        toast.success('已插入到对应段落', { description: inserted.targetTitle });
+        return;
+      }
+    }
     const textarea = draftTextareaRef.current;
     if (textarea) {
       const start = textarea.selectionStart ?? editDraft.length;
@@ -619,31 +714,6 @@ export default function Workbench() {
     );
   }
 
-  /* ===== Generating overlay ===== */
-  if (generating) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Card className="w-full max-w-[400px] border-0 shadow-none text-center">
-          <CardContent className="flex flex-col items-center pt-10 pb-10">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 mb-5">
-              <Sparkles size={24} className="animate-pulse text-primary" />
-            </div>
-            <h2 className="text-section-title font-semibold mb-2">{generatingLabel || 'AI 生成中'}</h2>
-            <p className="text-helper text-muted-foreground leading-relaxed mb-5">
-              AI 正在根据知识库上下文生成内容，包含知识片段引用和规则检查，预计需要 10-60 秒...
-            </p>
-            {streamingText && (
-              <div className="mb-5 max-h-64 w-full overflow-auto rounded-[var(--radius-md)] border border-border bg-muted/25 p-3 text-left">
-                <MarkdownRenderer content={streamingText} segments={context?.segments} />
-              </div>
-            )}
-            <Loader2 size={18} className="animate-spin text-primary" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   /* =================================================================== */
   /* ===== PHASE: OUTLINE (status 1-2) ===== */
   /* =================================================================== */
@@ -665,18 +735,18 @@ export default function Workbench() {
           </div>
           <div className="flex items-center gap-2">
             {!hasOutline ? (
-              <Button size="sm" className="gap-1.5 " onClick={handleGenerateOutline}>
+              <Button size="sm" className="gap-1.5 " onClick={handleGenerateOutline} disabled={generating}>
                 <Wand2 size={14} /> <span className="hidden sm:inline">AI 生成大纲</span>
               </Button>
             ) : (
               <>
-                <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateOutline}>
+                <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateOutline} disabled={generating}>
                   <RefreshCw size={14} /> <span className="hidden sm:inline">重新生成</span>
                 </Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 " onClick={handleSaveOutline} disabled={saving}>
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} <span className="hidden sm:inline">保存</span>
                 </Button>
-                <Button size="sm" className="gap-1.5 " onClick={handleConfirmOutlineAndGenerateDraft}>
+                <Button size="sm" className="gap-1.5 " onClick={handleConfirmOutlineAndGenerateDraft} disabled={generating}>
                   <Sparkles size={14} /> <span className="hidden md:inline">确认大纲并生成初稿</span>
                 </Button>
               </>
@@ -694,6 +764,14 @@ export default function Workbench() {
             </span>
           </div>
         </div>
+
+        {generating && (
+          <GenerationStrip
+            label={generatingLabel}
+            length={editOutline.length}
+            type="outline"
+          />
+        )}
 
         {/* Two-panel layout */}
         <div className="flex flex-1 overflow-hidden enter" style={{ '--enter-delay': '120ms' }}>
@@ -788,7 +866,7 @@ export default function Workbench() {
             <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateDraft}>
+            <Button variant="outline" size="sm" className="gap-1.5 " onClick={handleRegenerateDraft} disabled={generating}>
               <RefreshCw size={14} /> <span className="hidden sm:inline">重新生成<span className="hidden md:inline">初稿</span></span>
             </Button>
             <Button variant="ghost" size="sm" className="gap-1.5 " onClick={handleSaveDraft} disabled={saving}>
@@ -819,6 +897,14 @@ export default function Workbench() {
             <span className="text-[11px] text-muted-foreground">编辑初稿后点击「确认终稿」</span>
           </div>
         </div>
+
+        {generating && (
+          <GenerationStrip
+            label={generatingLabel}
+            length={(editDraft || draftText).length}
+            type="draft"
+          />
+        )}
 
         {/* Three-column layout */}
         <div className="flex flex-1 overflow-hidden enter" style={{ '--enter-delay': '180ms' }}>
@@ -1059,9 +1145,226 @@ export default function Workbench() {
   );
 }
 
+function GenerationStrip({ label, length, type }) {
+  const name = type === 'draft' ? '初稿' : '大纲';
+
+  return (
+    <div className="shrink-0 border-b bg-primary/5 px-5 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Sparkles size={15} className="animate-pulse" />
+          </span>
+          <div className="min-w-0">
+            <div className="font-medium text-foreground">{label || `正在生成${name}`}</div>
+            <div className="text-[11px] text-muted-foreground">
+              SSE 流式输出中，内容会直接写入{name}编辑区
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span>{length || 0} 字</span>
+          <Loader2 size={14} className="animate-spin text-primary" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ===== Right Panel Component ===== */
 
+function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
+  const { removed, added } = changedLines(mod.before, mod.after, 2);
+  const delta = mod.summary?.deltaChars || 0;
+
+  return (
+    <Card className="bg-card border border-border enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300" style={{ '--enter-delay': `${index * 50}ms` }}>
+      <CardContent className="p-3.5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Badge variant="secondary" className="text-[10px]">
+              {mod.type === 'outline' ? '大纲' : mod.type === 'initial_draft' ? '初稿' : '终稿'}
+            </Badge>
+            <span className="truncate text-[10px] text-muted-foreground">
+              {OPERATION_LABELS[mod.operationType] || mod.operationType}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto gap-1 px-1.5 py-0.5 text-[10px]"
+            onClick={() => onOpen(mod)}
+          >
+            <Search size={10} /> 详情
+          </Button>
+        </div>
+
+        <div className="mb-2 flex items-center gap-1">
+          <Clock size={11} className="text-muted-foreground" />
+          <span className="text-[11px] text-muted-foreground">{mod.time}</span>
+        </div>
+
+        <div className="mb-2 grid grid-cols-3 gap-1 text-center text-[10px]">
+          <div className="rounded bg-muted/50 px-1.5 py-1">
+            <div className="font-medium text-destructive">{mod.summary.removedLines}</div>
+            <div className="text-muted-foreground">删除行</div>
+          </div>
+          <div className="rounded bg-muted/50 px-1.5 py-1">
+            <div className="font-medium text-[hsl(var(--success))]">{mod.summary.addedLines}</div>
+            <div className="text-muted-foreground">新增行</div>
+          </div>
+          <div className="rounded bg-muted/50 px-1.5 py-1">
+            <div className={cn('font-medium', delta < 0 ? 'text-destructive' : delta > 0 ? 'text-[hsl(var(--success))]' : 'text-foreground')}>
+              {delta > 0 ? `+${delta}` : delta}
+            </div>
+            <div className="text-muted-foreground">字符</div>
+          </div>
+        </div>
+
+        {(removed.length > 0 || added.length > 0) ? (
+          <div className="rounded-[var(--radius-sm)] bg-background p-2 font-mono text-[11px] leading-relaxed">
+            {removed.map((line, i) => (
+              <div key={`r-${i}`} className="mb-1 text-destructive">
+                <span className="opacity-60">- </span>{makeContentPreview(line, 64)}
+              </div>
+            ))}
+            {added.map((line, i) => (
+              <div key={`a-${i}`} className="text-[hsl(var(--success))]">
+                <span className="opacity-60">+ </span>{makeContentPreview(line, 64)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[var(--radius-sm)] bg-background p-2 text-[11px] text-muted-foreground">
+            {mod.previewAfter || mod.previewBefore || '暂无可预览内容'}
+          </div>
+        )}
+
+        {!readonly && (
+          <div className="mt-2 flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto gap-1 px-1.5 py-0.5 text-[10px]"
+              onClick={() => onRevert(mod.id)}
+            >
+              <RotateCcw size={10} /> 回退到修改前
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
+  const { removed, added } = changedLines(mod.before, mod.after, 100);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center">
+      <div className="absolute inset-0 bg-foreground/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[86vh] w-[92vw] max-w-[980px] flex-col overflow-hidden rounded-lg bg-background shadow-[var(--shadow-modal)]">
+        <div className="flex shrink-0 items-center justify-between border-b px-5 py-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-[10px]">
+                {mod.type === 'outline' ? '大纲' : mod.type === 'initial_draft' ? '初稿' : '终稿'}
+              </Badge>
+              <span className="text-sm font-semibold">{OPERATION_LABELS[mod.operationType] || mod.operationType}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock size={11} /> {mod.time}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+            <X size={16} />
+          </Button>
+        </div>
+
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded-md border bg-muted/30 p-2">
+                <div className="text-base font-semibold text-destructive">{mod.summary.removedLines}</div>
+                <div className="text-muted-foreground">删除行</div>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-2">
+                <div className="text-base font-semibold text-[hsl(var(--success))]">{mod.summary.addedLines}</div>
+                <div className="text-muted-foreground">新增行</div>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-2">
+                <div className="text-base font-semibold">{mod.summary.deltaChars > 0 ? `+${mod.summary.deltaChars}` : mod.summary.deltaChars}</div>
+                <div className="text-muted-foreground">字符变化</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-semibold text-foreground">关键变更</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <DiffList title="删除内容" lines={removed} tone="removed" />
+                <DiffList title="新增内容" lines={added} tone="added" />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-semibold text-foreground">完整内容对比</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <FullContentBlock title="修改前" content={mod.before} tone="removed" />
+                <FullContentBlock title="修改后" content={mod.after} tone="added" />
+              </div>
+            </div>
+          </div>
+        </ScrollArea>
+
+        <div className="flex shrink-0 justify-end gap-2 border-t px-5 py-3">
+          {!readonly && (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onRevert(mod.id)}>
+              <RotateCcw size={13} /> 回退到修改前
+            </Button>
+          )}
+          <Button size="sm" onClick={onClose}>关闭</Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function DiffList({ title, lines, tone }) {
+  const isRemoved = tone === 'removed';
+  return (
+    <div className="rounded-md border bg-background">
+      <div className="border-b px-3 py-2 text-xs font-medium">{title}</div>
+      <div className="max-h-52 overflow-auto p-3">
+        {lines.length > 0 ? lines.map((line, i) => (
+          <div key={i} className={cn('mb-2 font-mono text-[11px] leading-relaxed last:mb-0', isRemoved ? 'text-destructive' : 'text-[hsl(var(--success))]')}>
+            <span className="opacity-60">{isRemoved ? '- ' : '+ '}</span>{line}
+          </div>
+        )) : (
+          <div className="text-[12px] text-muted-foreground">无</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FullContentBlock({ title, content, tone }) {
+  return (
+    <div className="rounded-md border bg-background">
+      <div className="border-b px-3 py-2 text-xs font-medium">{title}</div>
+      <pre className={cn(
+        'max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed',
+        tone === 'removed' ? 'text-destructive' : 'text-[hsl(var(--success))]'
+      )}>
+        {content || '无内容'}
+      </pre>
+    </div>
+  );
+}
+
 function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, context, onRevert, readonly, articleId, draftContent, segments, onInsertImage }) {
+  const [selectedMod, setSelectedMod] = useState(null);
+
   return (
     <div className="hidden lg:flex w-80 shrink-0 flex-col overflow-hidden border-l enter" style={{ '--enter-delay': '200ms' }}>
       <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-1 flex-col overflow-hidden">
@@ -1102,48 +1405,14 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-3 p-4">
               {modifications.length > 0 ? modifications.map((mod, idx) => (
-                <Card key={mod.id} className="bg-card border border-border enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300" style={{ '--enter-delay': `${idx * 50}ms` }}>
-                  <CardContent className="p-3.5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-[10px]">
-                          {mod.type === 'outline' ? '大纲' : mod.type === 'initial_draft' ? '初稿' : '终稿'}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          {OPERATION_LABELS[mod.operationType] || mod.operationType}
-                        </span>
-                      </div>
-                      {!readonly && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto gap-1 px-1.5 py-0.5 text-[10px] "
-                          onClick={() => onRevert(mod.id)}
-                        >
-                          <RotateCcw size={10} /> 回退
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <Clock size={11} className="text-muted-foreground" />
-                      <span className="text-[11px] text-muted-foreground">{mod.time}</span>
-                    </div>
-                    {(mod.before || mod.after) && (
-                      <div className="rounded-[var(--radius-sm)] bg-background p-2 font-mono text-[11px] leading-relaxed">
-                        {mod.before && (
-                          <div className="text-destructive mb-1">
-                            <span className="opacity-60">- </span>{mod.before}
-                          </div>
-                        )}
-                        {mod.after && (
-                          <div className="text-[hsl(var(--success))]">
-                            <span className="opacity-60">+ </span>{mod.after}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <ModificationCard
+                  key={mod.id}
+                  mod={mod}
+                  index={idx}
+                  readonly={readonly}
+                  onRevert={onRevert}
+                  onOpen={setSelectedMod}
+                />
               )) : (
                 <div className="py-10 text-center text-muted-foreground">
                   <p className="text-[13px]">暂无修改记录</p>
@@ -1151,6 +1420,14 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
               )}
             </div>
           </ScrollArea>
+          {selectedMod && (
+            <ModificationDetailModal
+              mod={selectedMod}
+              readonly={readonly}
+              onClose={() => setSelectedMod(null)}
+              onRevert={onRevert}
+            />
+          )}
         </TabsContent>
 
         {/* Context tab */}

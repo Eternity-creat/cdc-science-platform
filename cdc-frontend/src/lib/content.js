@@ -151,6 +151,7 @@ export function parseImageAlt(rawAlt) {
     caption: raw,
     align: 'center',
     width: 720,
+    showCaption: true,
   };
 
   const attrMatch = raw.match(/\{([^}]+)\}\s*$/);
@@ -172,11 +173,86 @@ export function parseImageAlt(rawAlt) {
       const width = Number.parseInt(value, 10);
       if (Number.isFinite(width)) result.width = Math.min(Math.max(width, 240), 960);
     }
+    if (key === 'caption' && ['0', 'false', 'none', 'hide'].includes(String(value).toLowerCase())) {
+      result.showCaption = false;
+    }
     return '';
   });
 
   result.caption = text || '配图';
+  if (looksLikeImagePrompt(result.caption)) {
+    result.caption = '配图';
+    result.showCaption = false;
+  }
   return result;
+}
+
+export function extractImagePromptMeta(prompt) {
+  const value = String(prompt || '').replace(/\r\n/g, '\n').trim();
+  if (!value) {
+    return {
+      topic: '',
+      sectionTitle: '',
+      sectionContent: '',
+      requirement: '',
+    };
+  }
+
+  const readField = (label) => {
+    const match = value.match(new RegExp(`${label}[：:]\\s*([^\\n]+)`));
+    return match ? match[1].trim() : '';
+  };
+
+  return {
+    topic: readField('主题'),
+    sectionTitle: readField('段落标题'),
+    sectionContent: readField('段落内容'),
+    requirement: readField('要求'),
+  };
+}
+
+export function insertMarkdownAtSuggestedSection(content, markdown, image) {
+  const source = String(content || '');
+  const insert = String(markdown || '');
+  const meta = extractImagePromptMeta(image?.generationPrompt || image?.prompt || '');
+  const targetTitle = meta.sectionTitle || '';
+
+  if (targetTitle) {
+    const escaped = targetTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const headingMatch = new RegExp(`(^|\\n)(#{1,6}\\s+.*${escaped}.*)(\\n|$)`).exec(source);
+    if (headingMatch) {
+      const lineEnd = headingMatch.index + headingMatch[0].length;
+      const insertAt = headingMatch[0].endsWith('\n') ? lineEnd : lineEnd + 1;
+      return {
+        content: `${source.slice(0, insertAt)}${insert}${source.slice(insertAt)}`,
+        matched: true,
+        targetTitle,
+      };
+    }
+  }
+
+  return {
+    content: source,
+    matched: false,
+    targetTitle,
+  };
+}
+
+function looksLikeImagePrompt(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  const promptSignals = [
+    '为健康科普文章生成',
+    '生成一张配图',
+    '段落标题',
+    '段落内容',
+    '要求：',
+    '不包含文字',
+    '健康科普风格',
+    '专业医学插图风格',
+  ];
+  const signalCount = promptSignals.filter((signal) => value.includes(signal)).length;
+  return value.length > 40 && signalCount >= 2;
 }
 
 export function buildImageMarkdown(image, options = {}) {
@@ -186,12 +262,13 @@ export function buildImageMarkdown(image, options = {}) {
   const align = ['left', 'center'].includes(options.align) ? options.align : 'center';
   const rawWidth = Number.parseInt(options.width ?? image?.width ?? 720, 10);
   const width = Number.isFinite(rawWidth) ? Math.min(Math.max(rawWidth, 240), 960) : 720;
-  const caption = String(image?.caption || '配图')
+  const alt = String(options.alt || '配图')
     .replace(/\|/g, ' ')
+    .replace(/[{}]/g, ' ')
     .replace(/\n+/g, ' ')
     .trim();
 
-  return `\n\n![${caption} | align=${align} | width=${width}](${src})\n\n`;
+  return `\n\n![${alt || '配图'} {align=${align} width=${width} caption=false}](${src})\n\n`;
 }
 
 export async function compressImageFile(file, options = {}) {

@@ -18,6 +18,63 @@ import {
 } from '../components/ui/select.jsx';
 import * as articleApi from '../api/article.js';
 
+const UNKNOWN_TEXT = new Set(['', '未知', '未指定', '无', 'æªç¥']);
+
+function isKnownText(value) {
+  const text = String(value ?? '').trim();
+  return text && !UNKNOWN_TEXT.has(text);
+}
+
+function findNameInText(list = [], text = '') {
+  const source = String(text || '').toLowerCase();
+  const sorted = [...list]
+    .map((item) => item?.stdName || item?.name || item?.templateName || '')
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  return sorted.find((name) => source.includes(String(name).toLowerCase())) || '';
+}
+
+function extractWordCount(text = '') {
+  const source = String(text || '');
+  const match = source.match(/(?:大约|约|控制在|不少于|不超过)?\s*(\d{3,5})\s*(?:字|字左右|个字)/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function parseIntentLocally(text, dropdown = {}) {
+  const source = String(text || '');
+  const diseaseName = findNameInText(dropdown.diseaseList || [], source);
+  const vaccineName = findNameInText(dropdown.vaccineList || [], source);
+  const populationName = findNameInText(dropdown.populationList || [], source)
+    || (/(全人群|所有人|大众|公众|普通人)/.test(source) ? '全人群' : '')
+    || (/(儿童|孩子|小孩|学生)/.test(source) ? '儿童' : '')
+    || (/(老人|老年|长者)/.test(source) ? '老年人' : '');
+  const sceneName = findNameInText(dropdown.sceneList || [], source)
+    || (/(问答|答疑|Q&A|FAQ)/i.test(source) ? '问答科普' : '')
+    || (/(预防|防控|传播)/.test(source) ? '预防科普' : '');
+  const keywordMatch = source.match(/关于([^，,。.\s的]+)|写一篇([^，,。.\s的]+)|介绍([^，,。.\s的]+)/);
+  const inferredEntity = diseaseName || vaccineName || keywordMatch?.[1] || keywordMatch?.[2] || keywordMatch?.[3] || '';
+
+  return {
+    entityType: vaccineName || /疫苗|接种/.test(source) && !diseaseName ? 'vaccine' : (inferredEntity ? 'disease' : ''),
+    entityName: inferredEntity,
+    populationName,
+    sceneName,
+    wordCount: extractWordCount(source) || 800,
+  };
+}
+
+function mergeIntentResult(remote = {}, local = {}) {
+  return {
+    entityType: isKnownText(remote.entityType) && ['disease', 'vaccine', 'population', 'scene'].includes(remote.entityType)
+      ? remote.entityType
+      : local.entityType,
+    entityName: isKnownText(remote.entityName) ? remote.entityName : local.entityName,
+    populationName: isKnownText(remote.populationName) ? remote.populationName : local.populationName,
+    sceneName: isKnownText(remote.sceneName) ? remote.sceneName : local.sceneName,
+    wordCount: remote.wordCount || local.wordCount || 800,
+  };
+}
+
 export default function ArticleCreate() {
   const navigate = useNavigate();
   const [mode, setMode] = useState('form');
@@ -106,15 +163,16 @@ export default function ArticleCreate() {
       return;
     }
     setSubmitting(true);
+    const localParsed = parseIntentLocally(freeText, dropdown);
     try {
-      const parsed = await articleApi.parseIntent(freeText);
-      setParsed({ userText: freeText, templateId: freeTextTemplateId, ...parsed });
+      const remoteParsed = await articleApi.parseIntent(freeText);
+      const merged = mergeIntentResult(remoteParsed, localParsed);
+      setParsed({ userText: freeText, templateId: freeTextTemplateId, ...merged, source: 'agent' });
       toast.success('智能解析完成');
     } catch (e) {
       console.error('智能解析失败:', e);
-      // Fallback: use local parsing
-      setParsed({ userText: freeText, templateId: freeTextTemplateId });
-      toast.error('智能解析失败，已使用本地解析', { description: e.message || '' });
+      setParsed({ userText: freeText, templateId: freeTextTemplateId, ...localParsed, source: 'local' });
+      toast.success('解析完成，已使用本地解析');
     } finally {
       setSubmitting(false);
     }
@@ -680,7 +738,7 @@ export default function ArticleCreate() {
               rows={6}
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
-              placeholder="例如：请帮我写一篇关于流感的科普文章，面向全人群，主要介绍流感的传播途径、预防措施和疫苗接种的重要性，大约1200字左右..."
+              placeholder="例如：请帮我写一篇流感疫苗拟人叙事风格的科普文章，全文约1000字。以流感疫苗第一人称视角讲故事，面向老人、儿童、孕妇、慢性病患者等重点接种人群，内容包含流感的危害、易感人群风险、接种适宜时间、接种前后注意事项、常见误区、居家月度防护清单，语言生动亲切，故事感强......"
             />
           </div>
 
@@ -700,9 +758,13 @@ export default function ArticleCreate() {
                 ))}
               </SelectContent>
             </Select>
-            <Button className="gap-1.5 " onClick={handleParse} disabled={!freeText}>
-              <Sparkles className="h-3.5 w-3.5" />
-              智能解析
+            <Button className="gap-1.5 " onClick={handleParse} disabled={!freeText || submitting}>
+              {submitting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {submitting ? '解析中' : '智能解析'}
             </Button>
           </div>
 
@@ -718,6 +780,24 @@ export default function ArticleCreate() {
                 <div className="rounded-[var(--radius-md)] bg-accent/50 p-3 text-body leading-relaxed text-muted-foreground">
                   {parsed.userText}
                 </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    ['主题', parsed.entityName || '未识别'],
+                    ['目标人群', parsed.populationName || '未指定'],
+                    ['应用场景', parsed.sceneName || '未指定'],
+                    ['字数', `${parsed.wordCount || 800} 字`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-[var(--radius-md)] border bg-background px-3 py-2">
+                      <div className="text-[11px] text-muted-foreground">{label}</div>
+                      <div className="mt-0.5 truncate text-[13px] font-medium text-foreground">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                {parsed.source === 'local' && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Agent 解析暂不可用，当前结果由本地规则生成，可直接确认或继续修改。
+                  </p>
+                )}
                 <div className="flex gap-2 mt-4">
                   <Button
                     className="gap-1.5 "

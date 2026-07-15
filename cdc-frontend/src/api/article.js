@@ -15,6 +15,29 @@ import {
   serializeTextCreateRequest,
 } from './normalize.js';
 
+const BASE_URL = '/api';
+
+async function agentPost(url, data) {
+  const res = await fetch(`${BASE_URL}${url}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}: ${res.statusText}`;
+    try {
+      const json = await res.json();
+      message = json.detail || json.msg || message;
+    } catch {
+      // Keep default message.
+    }
+    throw new Error(message);
+  }
+
+  return res.json();
+}
+
 /** 文章列表（含模板名、实体名、修改次数） */
 export const listArticles = async () => {
   const data = await get(`/article/list`);
@@ -112,4 +135,4 @@ export const listRecords = () => get(`/article/record/list`);
 
 /** FE-3 fix: 调用 Agent 意图解析接口（自由文本 → 结构化参数） */
 export const parseIntent = async (userText) =>
-  normalizeAgentIntent(await post(`/agent/parse-intent`, serializeAgentIntentRequest(userText)));
+  normalizeAgentIntent(await agentPost(`/agent/parse-intent`, serializeAgentIntentRequest(userText)));

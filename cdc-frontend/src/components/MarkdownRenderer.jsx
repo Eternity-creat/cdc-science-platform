@@ -202,7 +202,7 @@ export default function MarkdownRenderer({ content, mode = 'article', className,
             className="md-image max-h-[520px] w-auto max-w-full rounded-[var(--radius-md)] border border-border object-contain shadow-[var(--shadow-card)]"
             style={{ maxWidth: width }}
           />
-          {meta.caption && (
+          {meta.showCaption && meta.caption && (
             <figcaption className="max-w-[min(100%,720px)] text-xs leading-relaxed text-muted-foreground">
               {meta.caption}
             </figcaption>

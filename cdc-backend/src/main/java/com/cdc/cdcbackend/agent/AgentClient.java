@@ -187,6 +187,9 @@ public class AgentClient {
                         dataBuffer.append(line.substring("data:".length()).trim());
                     }
                 }
+                if (dataBuffer.length() > 0) {
+                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk);
+                }
             }
 
             log.info("Agent SSE 完成 (step={}, 长度={})", step, content.length());
@@ -204,16 +207,29 @@ public class AgentClient {
             String message = root.has("message") ? root.get("message").asText() : data;
             throw new RuntimeException(message);
         }
-        if (!"delta".equals(event)) return;
-
         JsonNode root = objectMapper.readTree(data);
-        JsonNode deltaNode = root.get("delta");
-        if (deltaNode == null || !deltaNode.isTextual()) return;
 
-        String delta = deltaNode.asText();
-        if (delta.isEmpty()) return;
-        content.append(delta);
-        if (onChunk != null) onChunk.accept(delta);
+        if ("replace".equals(event) || "done".equals(event)) {
+            JsonNode contentNode = root.get("content");
+            if (contentNode != null && contentNode.isTextual()) {
+                String replacement = contentNode.asText();
+                if (!replacement.equals(content.toString())) {
+                    content.setLength(0);
+                    content.append(replacement);
+                }
+            }
+            return;
+        }
+
+        if ("delta".equals(event)) {
+            JsonNode deltaNode = root.get("delta");
+            if (deltaNode == null || !deltaNode.isTextual()) return;
+
+            String delta = deltaNode.asText();
+            if (delta.isEmpty()) return;
+            content.append(delta);
+            if (onChunk != null) onChunk.accept(delta);
+        }
     }
 
     /**

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Image as ImageIcon, Loader2, Trash2, Edit3, X,
-  Sparkles, AlertTriangle, ImagePlus, Check, Upload, AlignCenter, AlignLeft
+  Sparkles, AlertTriangle, ImagePlus, Check, Upload, AlignCenter, AlignLeft,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from './ui/button.jsx';
@@ -11,7 +12,7 @@ import { Badge } from './ui/badge.jsx';
 import { ScrollArea } from './ui/scroll-area.jsx';
 import { Input } from './ui/input.jsx';
 import * as galleryApi from '../api/gallery.js';
-import { compressImageFile, normalizeImageSrc } from '../lib/content.js';
+import { compressImageFile, extractImagePromptMeta, normalizeImageSrc } from '../lib/content.js';
 
 /**
  * ImageGallery - 文章配图画廊（重新设计）
@@ -23,6 +24,27 @@ import { compressImageFile, normalizeImageSrc } from '../lib/content.js';
  *   draftContent - 当前初稿内容（用于 AI 分析段落）
  *   readonly     - 是否为只读模式（终稿阶段）
  */
+function getImageDisplayInfo(img) {
+  const promptMeta = extractImagePromptMeta(img?.generationPrompt || img?.prompt || '');
+  const rawCaption = String(img?.caption || '').trim();
+  const captionLooksPrompt = rawCaption.length > 40 && (
+    rawCaption.includes('段落标题') ||
+    rawCaption.includes('段落内容') ||
+    rawCaption.includes('为健康科普文章生成')
+  );
+  const sectionNo = img?.position == null ? null : Number(img.position) + 1;
+  const title = promptMeta.sectionTitle || (!captionLooksPrompt ? rawCaption : '') || (sectionNo ? `第 ${sectionNo} 部分配图` : '配图');
+
+  return {
+    sectionNo,
+    sectionLabel: sectionNo ? `第 ${sectionNo} 部分` : '推荐位置',
+    title,
+    content: promptMeta.sectionContent,
+    topic: promptMeta.topic,
+    requirement: promptMeta.requirement,
+  };
+}
+
 export default function ImageGallery({ articleId, draftContent, readonly = false, onInsertImage }) {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -32,6 +54,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
   const [previewImage, setPreviewImage] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editCaption, setEditCaption] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
   const [imageStatus, setImageStatus] = useState({});
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
@@ -91,11 +114,13 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
       const reachable = await galleryApi.isImageReachable(filePath);
       if (!reachable) continue;
 
+      const sectionTitle = img.section_title || img.sectionTitle || '';
+
       validImages.push({
         articleId: parseInt(articleId, 10),
         imageKey: img.image_key || img.imageKey || `img_${String(Date.now()).slice(-6)}_${idx + 1}`,
         filePath,
-        caption: img.caption || img.prompt || `段落配图 ${idx + 1}`,
+        caption: img.caption || sectionTitle || `第 ${(img.section_index ?? img.position ?? idx) + 1} 部分配图`,
         position: img.section_index ?? img.position ?? idx,
         generatedBy: img.generated_by || img.generatedBy || 'SenseNova-U1-Lite',
         generationPrompt: img.prompt || img.generation_prompt || '',
@@ -342,6 +367,8 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                 {images.map((img, idx) => {
                   const status = imageStatus[img.id] || (img.filePath ? 'checking' : 'error');
                   const canUseImage = Boolean(img.filePath) && status !== 'error';
+                  const info = getImageDisplayInfo(img);
+                  const expanded = expandedId === img.id;
                   const placeholderText = !img.filePath
                     ? '无图片路径'
                     : status === 'checking'
@@ -351,7 +378,10 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                   return (
                   <Card
                     key={img.id}
-                    className="group bg-card border border-border overflow-hidden enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300"
+                    className={cn(
+                      "group bg-card border border-border overflow-hidden enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300",
+                      expanded && "col-span-2"
+                    )}
                     style={{ '--enter-delay': `${idx * 50}ms` }}
                   >
                     {/* Image thumbnail - click to enlarge */}
@@ -402,10 +432,10 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                       </div>
 
                       {/* Position badge */}
-                      {img.position != null && (
+                      {info.sectionNo != null && (
                         <div className="absolute top-1.5 left-1.5">
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-background/70 backdrop-blur-sm">
-                            P{img.position + 1}
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-background/80 backdrop-blur-sm">
+                            {info.sectionLabel}
                           </Badge>
                         </div>
                       )}
@@ -433,9 +463,54 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                           </button>
                         </div>
                       ) : (
-                        <p className="text-[11px] text-muted-foreground leading-snug line-clamp-2 min-h-[2.2em]">
-                          {img.caption || '暂无说明'}
-                        </p>
+                        <button
+                          type="button"
+                          className="flex w-full items-start justify-between gap-1 text-left"
+                          onClick={() => setExpandedId(expanded ? null : img.id)}
+                          title="查看对应段落说明"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-[10px] font-medium text-primary">
+                              {info.sectionLabel}
+                            </span>
+                            <span className={cn(
+                              "block text-[11px] text-muted-foreground leading-snug",
+                              expanded ? "" : "line-clamp-2 min-h-[2.2em]"
+                            )}>
+                              {info.title || '暂无说明'}
+                            </span>
+                          </span>
+                          {expanded ? (
+                            <ChevronUp size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+                          )}
+                        </button>
+                      )}
+                      {expanded && (
+                        <div className="mt-2 rounded-md bg-muted/40 p-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {info.content && (
+                            <p>
+                              <span className="font-medium text-foreground/70">段落摘要：</span>
+                              {info.content}
+                            </p>
+                          )}
+                          {info.topic && (
+                            <p className="mt-1">
+                              <span className="font-medium text-foreground/70">文章主题：</span>
+                              {info.topic}
+                            </p>
+                          )}
+                          {info.requirement && (
+                            <p className="mt-1 line-clamp-3">
+                              <span className="font-medium text-foreground/70">生成要求：</span>
+                              {info.requirement}
+                            </p>
+                          )}
+                          {!info.content && !info.topic && !info.requirement && (
+                            <p>暂无更多段落说明</p>
+                          )}
+                        </div>
                       )}
                       {img.generatedBy && (
                         <p className="text-[9px] text-muted-foreground/50 mt-1 truncate">
@@ -446,35 +521,40 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
 
                     {/* Insert button (non-readonly only) */}
                     {!readonly && onInsertImage && (
-                      <div className="grid grid-cols-2 gap-1 px-2 pb-2">
-                        <button
-                          className={cn(
-                            "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
-                            canUseImage
-                              ? "bg-primary/8 hover:bg-primary/15 text-primary"
-                              : "bg-muted text-muted-foreground/50 cursor-not-allowed"
-                          )}
-                          onClick={() => canUseImage && onInsertImage(img, { align: 'center', width: 720 })}
-                          disabled={!canUseImage}
-                          title="居中插入文章"
-                        >
-                          <AlignCenter size={12} />
-                          居中
-                        </button>
-                        <button
-                          className={cn(
-                            "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
-                            canUseImage
-                              ? "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
-                              : "bg-muted text-muted-foreground/50 cursor-not-allowed"
-                          )}
-                          onClick={() => canUseImage && onInsertImage(img, { align: 'left', width: 520 })}
-                          disabled={!canUseImage}
-                          title="左对齐插入文章"
-                        >
-                          <AlignLeft size={12} />
-                          左对齐
-                        </button>
+                      <div className="px-2 pb-2">
+                        <p className="mb-1 text-[10px] text-muted-foreground">
+                          插入到{info.sectionLabel}
+                        </p>
+                        <div className="grid grid-cols-2 gap-1">
+                          <button
+                            className={cn(
+                              "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              canUseImage
+                                ? "bg-primary/8 hover:bg-primary/15 text-primary"
+                                : "bg-muted text-muted-foreground/50 cursor-not-allowed"
+                            )}
+                            onClick={() => canUseImage && onInsertImage(img, { align: 'center', width: 720, insertAt: 'section' })}
+                            disabled={!canUseImage}
+                            title="居中插入对应段落"
+                          >
+                            <AlignCenter size={12} />
+                            居中
+                          </button>
+                          <button
+                            className={cn(
+                              "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              canUseImage
+                                ? "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+                                : "bg-muted text-muted-foreground/50 cursor-not-allowed"
+                            )}
+                            onClick={() => canUseImage && onInsertImage(img, { align: 'left', width: 520, insertAt: 'section' })}
+                            disabled={!canUseImage}
+                            title="左对齐插入对应段落"
+                          >
+                            <AlignLeft size={12} />
+                            左对齐
+                          </button>
+                        </div>
                       </div>
                     )}
                   </Card>

@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from app.skills.base import BaseSkill, SkillMetadata
 from app.core.llm import LLMClient
+from app.core.streaming import ParagraphStreamBuffer
 from app.prompts.outline_generate import OUTLINE_GENERATE_PROMPT
 from loguru import logger
 
@@ -83,9 +84,14 @@ class OutlineGenerateSkill(BaseSkill):
         stream_callback = state.get("_stream_callback")
         if stream_callback:
             chunks = []
+            paragraph_buffer = ParagraphStreamBuffer()
             async for delta in self.llm.chat_stream(messages):
                 chunks.append(delta)
-                await stream_callback(delta)
+                for paragraph in paragraph_buffer.push(delta):
+                    await stream_callback(paragraph)
+            remaining = paragraph_buffer.flush()
+            if remaining:
+                await stream_callback(remaining)
             response = "".join(chunks)
         else:
             response = await self.llm.chat(messages)
