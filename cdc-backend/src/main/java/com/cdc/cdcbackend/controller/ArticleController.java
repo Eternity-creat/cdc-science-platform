@@ -124,7 +124,7 @@ public class ArticleController {
 
     // 12. 回退到历史版本
     @PostMapping("/{id}/revert")
-    public Result<Boolean> revert(@PathVariable Long id, @RequestBody Map<String, Long> body) {
+    public Result<CdcArticle> revert(@PathVariable Long id, @RequestBody Map<String, Long> body) {
         // BUG-NEW-10 fix: 输入校验
         if (body == null || body.get("modificationId") == null) {
             return Result.fail("缺少必填参数: modificationId");

@@ -95,8 +95,8 @@ export const autoSave = (id, field, content) =>
   post(`/article/${id}/autosave`, { field, content });
 
 /** 回退到历史版本 */
-export const revertToModification = (id, modificationId) =>
-  post(`/article/${id}/revert`, { modificationId });
+export const revertToModification = async (id, modificationId) =>
+  normalizeArticleDetail(await post(`/article/${id}/revert`, { modificationId }));
 
 /** 确认终稿（兼容旧接口） */
 export const confirmFinal = (id) => post(`/article/${id}/confirm`);

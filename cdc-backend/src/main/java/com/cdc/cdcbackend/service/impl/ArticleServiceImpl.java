@@ -820,7 +820,7 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     @Transactional
-    public boolean revertToModification(Long articleId, Long modificationId) {
+    public CdcArticle revertToModification(Long articleId, Long modificationId) {
         CdcArticleModification mod = getModifications(articleId).stream()
                 .filter(item -> Objects.equals(item.getId(), modificationId))
                 .findFirst()
@@ -859,7 +859,7 @@ public class ArticleServiceImpl implements ArticleService {
             if (articleMapper.updateOutline(up) <= 0) {
                 throw new RuntimeException("回退版本写入失败");
             }
-            return true;
+            return getArticleOrThrow(articleId);
         } else if ("initial_draft".equals(mod.getModifyType())) {
             currentContent = normalizeContent(article.getInitialDraft());
             restoreContent = normalizeContent(restoreContent);
@@ -876,10 +876,10 @@ public class ArticleServiceImpl implements ArticleService {
             if (articleMapper.updateInitialDraft(up) <= 0) {
                 throw new RuntimeException("回退版本写入失败");
             }
-            return true;
+            return getArticleOrThrow(articleId);
         }
 
-        return false;
+        throw new RuntimeException("不支持回退该内容类型");
     }
 
     @Override

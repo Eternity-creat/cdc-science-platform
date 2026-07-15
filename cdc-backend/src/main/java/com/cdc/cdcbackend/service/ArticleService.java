@@ -62,7 +62,7 @@ public interface ArticleService {
     boolean autoSave(Long id, String field, String content);
 
     // 回退到历史版本
-    boolean revertToModification(Long articleId, Long modificationId);
+    CdcArticle revertToModification(Long articleId, Long modificationId);
 
     boolean confirmFinal(Long id);
 

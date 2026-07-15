@@ -707,23 +707,15 @@ export default function Workbench() {
         setConfirmDialog(null);
         try {
           await flushAutoSaveBeforeManualSave();
-          const reverted = await articleApi.revertToModification(id, modificationId);
-          if (!reverted) throw new Error('回退未完成，请刷新后重试');
-          // Reload article
-          const art = await articleApi.getArticle(id);
-          if (art) {
-            setArticle(art);
-            if (art.outline) {
-              setOutline(art.outline);
-              setEditOutline(art.outline);
-              setOutlineItems(parseOutlineToTree(art.outline));
-            }
-            if (art.initialDraft) {
-              setDraftText(art.initialDraft);
-              setEditDraft(art.initialDraft);
-            }
-            if (art.finalArticle) setFinalText(art.finalArticle);
-          }
+          const art = await articleApi.revertToModification(id, modificationId);
+          if (!art?.id) throw new Error('回退未完成，请刷新后重试');
+          setArticle(art);
+          setOutline(art.outline || '');
+          setEditOutline(art.outline || '');
+          setOutlineItems(parseOutlineToTree(art.outline || ''));
+          setDraftText(art.initialDraft || '');
+          setEditDraft(art.initialDraft || '');
+          setFinalText(art.finalArticle || '');
           const mods = await articleApi.getModifications(id).catch(() => []);
           setModifications(parseModifications(mods));
           toast.success('已回退到历史版本');
