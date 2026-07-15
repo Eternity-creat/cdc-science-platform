@@ -231,7 +231,7 @@ function OutlineTreeItem({ item, expanded, toggle, onClick, activeId, index = 0 
 function ConfirmDialog({ open, title, message, onConfirm, onCancel, loading, confirmText, variant }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[140] flex items-center justify-center">
       <div className="absolute inset-0 bg-foreground/50 backdrop-blur-sm" onClick={onCancel} />
       <Card className="relative z-10 w-full max-w-sm shadow-[var(--shadow-modal)]">
         <CardContent className="p-6">
@@ -675,7 +675,8 @@ export default function Workbench() {
       onConfirm: async () => {
         setConfirmDialog(null);
         try {
-          await articleApi.revertToModification(id, modificationId);
+          const reverted = await articleApi.revertToModification(id, modificationId);
+          if (!reverted) throw new Error('回退未完成，请刷新后重试');
           // Reload article
           const art = await articleApi.getArticle(id);
           if (art) {
@@ -1382,7 +1383,15 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
 
         <div className="flex shrink-0 justify-end gap-2 border-t px-5 py-3">
           {!readonly && (
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onRevert(mod.id)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => {
+                onClose();
+                onRevert(mod.id);
+              }}
+            >
               <RotateCcw size={13} /> 回退到修改前
             </Button>
           )}

@@ -819,6 +819,7 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
+    @Transactional
     public boolean revertToModification(Long articleId, Long modificationId) {
         CdcArticleModification mod = getModifications(articleId).stream()
                 .filter(item -> Objects.equals(item.getId(), modificationId))
@@ -852,7 +853,10 @@ public class ArticleServiceImpl implements ArticleService {
             CdcArticle up = new CdcArticle();
             up.setId(articleId);
             up.setOutline(restoreContent);
-            return articleMapper.updateOutline(up) > 0;
+            if (articleMapper.updateOutline(up) <= 0) {
+                throw new RuntimeException("回退版本写入失败");
+            }
+            return true;
         } else if ("initial_draft".equals(mod.getModifyType())) {
             currentContent = article.getInitialDraft();
             revertMod.setModifyType("initial_draft");
@@ -863,7 +867,10 @@ public class ArticleServiceImpl implements ArticleService {
             CdcArticle up = new CdcArticle();
             up.setId(articleId);
             up.setInitialDraft(restoreContent);
-            return articleMapper.updateInitialDraft(up) > 0;
+            if (articleMapper.updateInitialDraft(up) <= 0) {
+                throw new RuntimeException("回退版本写入失败");
+            }
+            return true;
         }
 
         return false;
