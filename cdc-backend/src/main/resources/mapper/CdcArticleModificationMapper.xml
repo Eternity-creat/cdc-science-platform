@@ -11,7 +11,17 @@
     <select id="listByArticleId" parameterType="long" resultType="CdcArticleModification">
         SELECT * FROM cdc_article_modification
         WHERE article_id=#{articleId}
+          AND (operation_type IS NULL OR operation_type &lt;&gt; 'autosave_pending')
         ORDER BY modify_time DESC
+    </select>
+
+    <select id="getPending" resultType="CdcArticleModification">
+        SELECT * FROM cdc_article_modification
+        WHERE article_id=#{articleId}
+          AND modify_type=#{modifyType}
+          AND operation_type='autosave_pending'
+        ORDER BY id DESC
+        LIMIT 1
     </select>
 
     <select id="getById" parameterType="long" resultType="CdcArticleModification">
@@ -26,7 +36,14 @@
     <update id="updateById" parameterType="CdcArticleModification">
         UPDATE cdc_article_modification
         SET after_content=#{afterContent}
+        <if test="operationType != null">, operation_type=#{operationType}</if>
+        <if test="beforeContent != null">, before_content=#{beforeContent}</if>
+        <if test="modifyTime != null">, modify_time=#{modifyTime}</if>
         WHERE id=#{id}
     </update>
+
+    <delete id="deleteById" parameterType="long">
+        DELETE FROM cdc_article_modification WHERE id=#{id}
+    </delete>
 
 </mapper>

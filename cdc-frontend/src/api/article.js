@@ -1,4 +1,4 @@
-import { get, post, put, putRaw, del } from './index.js';
+import { get, post, postRaw, put, putRaw, del } from './index.js';
 import { streamWithFallback } from './sse.js';
 import {
   normalizeArticleDetail,
@@ -75,7 +75,7 @@ export const saveOutline = (id, content) => putRaw(`/article/${id}/outline`, con
 export const saveDraft = (id, content) => putRaw(`/article/${id}/draft`, content);
 
 /** 确认大纲（保存大纲，状态保持 2，前端随后调 generateDraft） */
-export const confirmOutline = (id, content) => post(`/article/${id}/confirm-outline`, content);
+export const confirmOutline = (id, content) => postRaw(`/article/${id}/confirm-outline`, content);
 
 /** 确认初稿为终稿（status 3 → 4） */
 export const confirmDraft = (id) => post(`/article/${id}/confirm-draft`);

@@ -49,6 +49,13 @@ export const get = (url) => request(url);
 export const post = (url, data) =>
   request(url, { method: 'POST', body: JSON.stringify(data) });
 
+export const postRaw = (url, rawString) =>
+  request(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
+    body: rawString ?? '',
+  });
+
 export const put = (url, data) =>
   request(url, { method: 'PUT', body: JSON.stringify(data) });
 
@@ -60,5 +67,6 @@ export const postForm = (url, formData) =>
 export const putRaw = (url, rawString) =>
   request(url, {
     method: 'PUT',
-    body: JSON.stringify(rawString),
+    headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
+    body: rawString ?? '',
   });

@@ -1,13 +1,17 @@
 package com.cdc.cdcbackend.mapper;
 import com.cdc.cdcbackend.entity.CdcArticleModification;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 @Mapper
 public interface CdcArticleModificationMapper {
     int insert(CdcArticleModification dto);
     List<CdcArticleModification> listByArticleId(Long articleId);
+    CdcArticleModification getPending(@Param("articleId") Long articleId,
+                                      @Param("modifyType") String modifyType);
     CdcArticleModification getById(Long id);
     int updateById(CdcArticleModification mod);  // BUG-NEW-5 fix: 支持 update 操作
+    int deleteById(Long id);
     int deleteByArticleId(Long articleId);
 }

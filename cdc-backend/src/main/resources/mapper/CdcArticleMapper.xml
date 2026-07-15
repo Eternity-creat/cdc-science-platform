@@ -54,7 +54,8 @@
                r.entity_type   AS entityType,
                r.user_text     AS userText,
                w.std_name      AS entityName,
-               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id) AS modifyCount
+               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id
+                    AND (m.operation_type IS NULL OR m.operation_type &lt;&gt; 'autosave_pending')) AS modifyCount
         FROM cdc_article a
                  LEFT JOIN cdc_article_template t ON a.template_id = t.id
                  LEFT JOIN cdc_article_request r ON a.request_id = r.id
@@ -96,7 +97,8 @@
                r.entity_type   AS entityType,
                r.user_text     AS userText,
                w.std_name      AS entityName,
-               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id) AS modifyCount
+               (SELECT COUNT(*) FROM cdc_article_modification m WHERE m.article_id = a.id
+                    AND (m.operation_type IS NULL OR m.operation_type &lt;&gt; 'autosave_pending')) AS modifyCount
         FROM cdc_article a
                  LEFT JOIN cdc_article_template t ON a.template_id = t.id
                  LEFT JOIN cdc_article_request r ON a.request_id = r.id

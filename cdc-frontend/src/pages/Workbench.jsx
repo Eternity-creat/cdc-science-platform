@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { diffWordsWithSpace } from 'diff';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
@@ -88,55 +89,98 @@ function parseModifications(modList) {
     type: m.modifyType || 'outline',
     operationType: m.operationType || 'manual_edit',
     time: m.modifyTime ? m.modifyTime.replace('T', ' ').slice(0, 19) : '',
-    before: m.beforeContent || '',
-    after: m.afterContent || '',
+    before: normalizeModificationContent(m.beforeContent || ''),
+    after: normalizeModificationContent(m.afterContent || ''),
     previewBefore: makeContentPreview(m.beforeContent || ''),
     previewAfter: makeContentPreview(m.afterContent || ''),
     summary: summarizeModification(m.beforeContent || '', m.afterContent || ''),
   }));
 }
 
+function normalizeModificationContent(content) {
+  let value = String(content || '');
+  for (let i = 0; i < 6; i += 1) {
+    const trimmed = value.trim();
+    if (!(trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"'))) break;
+    if (trimmed.startsWith('"#') || trimmed.startsWith('"##')) {
+      value = trimmed.slice(1, -1);
+      continue;
+    }
+    try {
+      const decoded = JSON.parse(trimmed);
+      if (typeof decoded !== 'string') break;
+      value = decoded;
+    } catch {
+      const inner = trimmed.slice(1, -1);
+      if (!inner.includes('\\n') && !inner.includes('\\"') && !inner.includes('\\\\')) break;
+      value = inner
+        .replace(/\\r\\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+    }
+  }
+  return value.replace(/\r\n/g, '\n');
+}
+
 function makeContentPreview(content, max = 90) {
-  const text = String(content || '').replace(/\s+/g, ' ').trim();
+  const text = normalizeModificationContent(content).replace(/\s+/g, ' ').trim();
   if (!text) return '';
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
-function normalizeDiffLines(content) {
-  return String(content || '')
-    .split('\n')
-    .map(line => line.trim())
-    .filter(Boolean);
-}
-
-function changedLines(before = '', after = '', limit = 8) {
-  const beforeLines = normalizeDiffLines(before);
-  const afterLines = normalizeDiffLines(after);
-  const afterSet = new Set(afterLines);
-  const beforeSet = new Set(beforeLines);
-  return {
-    removed: beforeLines.filter(line => !afterSet.has(line)).slice(0, limit),
-    added: afterLines.filter(line => !beforeSet.has(line)).slice(0, limit),
-  };
-}
-
 function summarizeModification(before = '', after = '') {
-  const beforeText = String(before || '');
-  const afterText = String(after || '');
-  const beforeLines = normalizeDiffLines(beforeText);
-  const afterLines = normalizeDiffLines(afterText);
-  const afterSet = new Set(afterLines);
-  const beforeSet = new Set(beforeLines);
-  const removedCount = beforeLines.filter(line => !afterSet.has(line)).length;
-  const addedCount = afterLines.filter(line => !beforeSet.has(line)).length;
+  const beforeText = normalizeModificationContent(before);
+  const afterText = normalizeModificationContent(after);
+  const changes = buildModificationDiff(beforeText, afterText);
   return {
     beforeChars: beforeText.length,
     afterChars: afterText.length,
     deltaChars: afterText.length - beforeText.length,
-    beforeLines: beforeLines.length,
-    afterLines: afterLines.length,
-    removedLines: removedCount,
-    addedLines: addedCount,
+    beforeLines: beforeText ? beforeText.split('\n').length : 0,
+    afterLines: afterText ? afterText.split('\n').length : 0,
+    removedLines: changes.deletions,
+    addedLines: changes.insertions,
+    replacements: changes.replacements,
+    changedParts: changes.total,
+  };
+}
+
+function buildModificationDiff(before = '', after = '') {
+  const parts = diffWordsWithSpace(before, after);
+  const changes = [];
+  let index = 0;
+
+  while (index < parts.length) {
+    if (!parts[index].removed && !parts[index].added) {
+      index += 1;
+      continue;
+    }
+
+    let removed = '';
+    let added = '';
+    while (index < parts.length && (parts[index].removed || parts[index].added)) {
+      if (parts[index].removed) removed += parts[index].value;
+      if (parts[index].added) added += parts[index].value;
+      index += 1;
+    }
+
+    const beforeValue = removed.trim();
+    const afterValue = added.trim();
+    if (!beforeValue && !afterValue) continue;
+    changes.push({
+      kind: beforeValue && afterValue ? 'replacement' : beforeValue ? 'deletion' : 'insertion',
+      before: beforeValue,
+      after: afterValue,
+    });
+  }
+
+  return {
+    changes,
+    replacements: changes.filter(change => change.kind === 'replacement').length,
+    deletions: changes.filter(change => change.kind === 'deletion').length,
+    insertions: changes.filter(change => change.kind === 'insertion').length,
+    total: changes.length,
   };
 }
 
@@ -247,6 +291,7 @@ export default function Workbench() {
 
   /* Refs for auto-save */
   const autoSaveTimer = useRef(null);
+  const autoSavePromise = useRef(null);
   const lastAutoSaveField = useRef(null);
   const draftTextareaRef = useRef(null);
   const draftPreviewScrollRef = useRef(null);
@@ -328,14 +373,29 @@ export default function Workbench() {
   const scheduleAutoSave = useCallback((field, content) => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
+      autoSaveTimer.current = null;
+      const request = articleApi.autoSave(id, field, content);
+      autoSavePromise.current = request;
       try {
-        await articleApi.autoSave(id, field, content);
+        await request;
         setAutoSavedAt(new Date());
       } catch (e) {
         console.error('自动保存失败:', e);
+      } finally {
+        if (autoSavePromise.current === request) autoSavePromise.current = null;
       }
     }, 3000);
   }, [id]);
+
+  const flushAutoSaveBeforeManualSave = useCallback(async () => {
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    if (autoSavePromise.current) {
+      await autoSavePromise.current.catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -444,6 +504,7 @@ export default function Workbench() {
   const handleSaveOutline = async () => {
     setSaving(true);
     try {
+      await flushAutoSaveBeforeManualSave();
       await articleApi.saveOutline(id, editOutline);
       setOutline(editOutline);
       setOutlineItems(parseOutlineToTree(editOutline));
@@ -462,6 +523,7 @@ export default function Workbench() {
     // First save outline if changed
     try {
       if (editOutline !== outline) {
+        await flushAutoSaveBeforeManualSave();
         await articleApi.confirmOutline(id, editOutline);
         setOutline(editOutline);
         setOutlineItems(parseOutlineToTree(editOutline));
@@ -553,6 +615,7 @@ export default function Workbench() {
   const handleSaveDraft = async () => {
     setSaving(true);
     try {
+      await flushAutoSaveBeforeManualSave();
       await articleApi.saveDraft(id, editDraft);
       setDraftText(editDraft);
       const mods = await articleApi.getModifications(id).catch(() => []);
@@ -570,6 +633,7 @@ export default function Workbench() {
     // Save draft if changed
     try {
       if (editDraft !== draftText) {
+        await flushAutoSaveBeforeManualSave();
         await articleApi.saveDraft(id, editDraft);
         setDraftText(editDraft);
       }
@@ -1174,7 +1238,8 @@ function GenerationStrip({ label, length, type }) {
 /* ===== Right Panel Component ===== */
 
 function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
-  const { removed, added } = changedLines(mod.before, mod.after, 2);
+  const diff = buildModificationDiff(mod.before, mod.after);
+  const changes = diff.changes.slice(0, 3);
   const delta = mod.summary?.deltaChars || 0;
 
   return (
@@ -1206,12 +1271,12 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
 
         <div className="mb-2 grid grid-cols-3 gap-1 text-center text-[10px]">
           <div className="rounded bg-muted/50 px-1.5 py-1">
-            <div className="font-medium text-destructive">{mod.summary.removedLines}</div>
-            <div className="text-muted-foreground">删除行</div>
+            <div className="font-medium text-foreground">{mod.summary.changedParts}</div>
+            <div className="text-muted-foreground">变更处</div>
           </div>
           <div className="rounded bg-muted/50 px-1.5 py-1">
-            <div className="font-medium text-[hsl(var(--success))]">{mod.summary.addedLines}</div>
-            <div className="text-muted-foreground">新增行</div>
+            <div className="font-medium text-destructive">{mod.summary.removedLines}</div>
+            <div className="text-muted-foreground">删除处</div>
           </div>
           <div className="rounded bg-muted/50 px-1.5 py-1">
             <div className={cn('font-medium', delta < 0 ? 'text-destructive' : delta > 0 ? 'text-[hsl(var(--success))]' : 'text-foreground')}>
@@ -1221,18 +1286,15 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
           </div>
         </div>
 
-        {(removed.length > 0 || added.length > 0) ? (
+        {changes.length > 0 ? (
           <div className="rounded-[var(--radius-sm)] bg-background p-2 font-mono text-[11px] leading-relaxed">
-            {removed.map((line, i) => (
-              <div key={`r-${i}`} className="mb-1 text-destructive">
-                <span className="opacity-60">- </span>{makeContentPreview(line, 64)}
+            {changes.map((change, i) => (
+              <div key={`change-${i}`} className="mb-1 last:mb-0">
+                {change.before && <div className="text-destructive"><span className="opacity-60">- </span>{makeContentPreview(change.before, 64)}</div>}
+                {change.after && <div className="text-[hsl(var(--success))]"><span className="opacity-60">+ </span>{makeContentPreview(change.after, 64)}</div>}
               </div>
             ))}
-            {added.map((line, i) => (
-              <div key={`a-${i}`} className="text-[hsl(var(--success))]">
-                <span className="opacity-60">+ </span>{makeContentPreview(line, 64)}
-              </div>
-            ))}
+            {diff.changes.length > changes.length && <div className="text-muted-foreground">还有 {diff.changes.length - changes.length} 处变更...</div>}
           </div>
         ) : (
           <div className="rounded-[var(--radius-sm)] bg-background p-2 text-[11px] text-muted-foreground">
@@ -1258,7 +1320,8 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
 }
 
 function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
-  const { removed, added } = changedLines(mod.before, mod.after, 100);
+  const diff = buildModificationDiff(mod.before, mod.after);
+  const fullDiff = diffWordsWithSpace(mod.before, mod.after);
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center">
@@ -1285,12 +1348,12 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
           <div className="space-y-4 p-5">
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-md border bg-muted/30 p-2">
-                <div className="text-base font-semibold text-destructive">{mod.summary.removedLines}</div>
-                <div className="text-muted-foreground">删除行</div>
+                <div className="text-base font-semibold">{mod.summary.changedParts}</div>
+                <div className="text-muted-foreground">变更处</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-2">
-                <div className="text-base font-semibold text-[hsl(var(--success))]">{mod.summary.addedLines}</div>
-                <div className="text-muted-foreground">新增行</div>
+                <div className="text-base font-semibold text-destructive">{mod.summary.removedLines}</div>
+                <div className="text-muted-foreground">删除处</div>
               </div>
               <div className="rounded-md border bg-muted/30 p-2">
                 <div className="text-base font-semibold">{mod.summary.deltaChars > 0 ? `+${mod.summary.deltaChars}` : mod.summary.deltaChars}</div>
@@ -1300,17 +1363,14 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
 
             <div>
               <div className="mb-2 text-xs font-semibold text-foreground">关键变更</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <DiffList title="删除内容" lines={removed} tone="removed" />
-                <DiffList title="新增内容" lines={added} tone="added" />
-              </div>
+              <DiffList title="精确变更内容" changes={diff.changes} />
             </div>
 
             <div>
               <div className="mb-2 text-xs font-semibold text-foreground">完整内容对比</div>
               <div className="grid gap-3 md:grid-cols-2">
-                <FullContentBlock title="修改前" content={mod.before} tone="removed" />
-                <FullContentBlock title="修改后" content={mod.after} tone="added" />
+                <FullContentBlock title="修改前" parts={fullDiff} side="before" />
+                <FullContentBlock title="修改后" parts={fullDiff} side="after" />
               </div>
             </div>
           </div>
@@ -1330,15 +1390,15 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
   );
 }
 
-function DiffList({ title, lines, tone }) {
-  const isRemoved = tone === 'removed';
+function DiffList({ title, changes }) {
   return (
     <div className="rounded-md border bg-background">
       <div className="border-b px-3 py-2 text-xs font-medium">{title}</div>
       <div className="max-h-52 overflow-auto p-3">
-        {lines.length > 0 ? lines.map((line, i) => (
-          <div key={i} className={cn('mb-2 font-mono text-[11px] leading-relaxed last:mb-0', isRemoved ? 'text-destructive' : 'text-[hsl(var(--success))]')}>
-            <span className="opacity-60">{isRemoved ? '- ' : '+ '}</span>{line}
+        {changes.length > 0 ? changes.map((change, i) => (
+          <div key={i} className="mb-3 font-mono text-[11px] leading-relaxed last:mb-0">
+            {change.before && <div className="text-destructive"><span className="opacity-60">- </span>{change.before}</div>}
+            {change.after && <div className="text-[hsl(var(--success))]"><span className="opacity-60">+ </span>{change.after}</div>}
           </div>
         )) : (
           <div className="text-[12px] text-muted-foreground">无</div>
@@ -1348,15 +1408,24 @@ function DiffList({ title, lines, tone }) {
   );
 }
 
-function FullContentBlock({ title, content, tone }) {
+function FullContentBlock({ title, parts, side }) {
   return (
     <div className="rounded-md border bg-background">
       <div className="border-b px-3 py-2 text-xs font-medium">{title}</div>
-      <pre className={cn(
-        'max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed',
-        tone === 'removed' ? 'text-destructive' : 'text-[hsl(var(--success))]'
-      )}>
-        {content || '无内容'}
+      <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-foreground">
+        {parts.length > 0 ? parts.map((part, index) => {
+          if (side === 'before' && part.added) return null;
+          if (side === 'after' && part.removed) return null;
+          const changed = side === 'before' ? part.removed : part.added;
+          return (
+            <span
+              key={index}
+              className={changed ? (side === 'before' ? 'bg-destructive/15 text-destructive' : 'bg-[hsl(var(--success))]/15 text-[hsl(var(--success))]') : undefined}
+            >
+              {part.value}
+            </span>
+          );
+        }) : '无内容'}
       </pre>
     </div>
   );

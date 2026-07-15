@@ -13,6 +13,7 @@ import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -579,65 +580,21 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
+    @Transactional
     public boolean saveOutline(Long id, String newContent) {
-        CdcArticle old = getArticleOrThrow(id);
-
-        CdcArticleModification m = new CdcArticleModification();
-        m.setArticleId(id);
-        m.setModifyType("outline");
-        m.setOperationType("manual_edit");
-        m.setBeforeContent(old.getOutline());
-        m.setAfterContent(newContent);
-        m.setModifyTime(LocalDateTime.now());
-        modifyMapper.insert(m);
-
-        CdcArticle up = new CdcArticle();
-        up.setId(id);
-        up.setOutline(newContent);
-        up.setStatus(old.getStatus());
-        return articleMapper.updateOutline(up) > 0;
+        return saveManualContent(id, "outline", newContent, null);
     }
 
     @Override
+    @Transactional
     public boolean saveDraft(Long id, String newContent) {
-        CdcArticle old = getArticleOrThrow(id);
-
-        CdcArticleModification m = new CdcArticleModification();
-        m.setArticleId(id);
-        m.setModifyType("initial_draft");
-        m.setOperationType("manual_edit");
-        m.setBeforeContent(old.getInitialDraft());
-        m.setAfterContent(newContent);
-        m.setModifyTime(LocalDateTime.now());
-        modifyMapper.insert(m);
-
-        CdcArticle up = new CdcArticle();
-        up.setId(id);
-        up.setInitialDraft(newContent);
-        up.setStatus(old.getStatus());
-        return articleMapper.updateInitialDraft(up) > 0;
+        return saveManualContent(id, "initial_draft", newContent, null);
     }
 
     @Override
+    @Transactional
     public boolean confirmOutline(Long id, String content) {
-        // Save the outline and keep status=2
-        CdcArticle old = getArticleOrThrow(id);
-        if (content != null && !content.equals(old.getOutline())) {
-            CdcArticleModification m = new CdcArticleModification();
-            m.setArticleId(id);
-            m.setModifyType("outline");
-            m.setOperationType("manual_edit");
-            m.setBeforeContent(old.getOutline());
-            m.setAfterContent(content);
-            m.setModifyTime(LocalDateTime.now());
-            modifyMapper.insert(m);
-
-            CdcArticle up = new CdcArticle();
-            up.setId(id);
-            up.setOutline(content);
-            up.setStatus(2);
-            articleMapper.updateOutline(up);
-        }
+        if (content != null) saveManualContent(id, "outline", content, 2);
         return true;
     }
 
@@ -733,19 +690,19 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
+    @Transactional
     public boolean autoSave(Long id, String field, String content) {
-        CdcArticle up = new CdcArticle();
-        up.setId(id);
+        String normalizedContent = normalizeContent(content);
         switch (field) {
             case "outline":
-                up.setOutline(content);
-                return articleMapper.autoSaveOutline(up) > 0;
+                return captureAutoSave(id, "outline", normalizedContent);
             case "initial_draft":
             case "draft":
-                up.setInitialDraft(content);
-                return articleMapper.autoSaveDraft(up) > 0;
+                return captureAutoSave(id, "initial_draft", normalizedContent);
             case "final_article":
             case "final":
+                CdcArticle up = new CdcArticle();
+                up.setId(id);
                 up.setFinalArticle(content);
                 return articleMapper.autoSaveFinal(up) > 0;
             default:
@@ -753,10 +710,117 @@ public class ArticleServiceImpl implements ArticleService {
         }
     }
 
+    /**
+     * Auto-save updates the article immediately, but keeps the first value in a hidden
+     * pending record so a later manual save can still produce a real before/after pair.
+     */
+    private boolean captureAutoSave(Long id, String modifyType, String content) {
+        CdcArticle article = getArticleOrThrow(id);
+        String current = normalizeContent(getContent(article, modifyType));
+        CdcArticleModification pending = modifyMapper.getPending(id, modifyType);
+        String baseline = pending == null ? current : normalizeContent(pending.getBeforeContent());
+
+        if (pending == null && Objects.equals(current, content)) return true;
+
+        if (pending == null) {
+            pending = new CdcArticleModification();
+            pending.setArticleId(id);
+            pending.setModifyType(modifyType);
+            pending.setOperationType("autosave_pending");
+            pending.setBeforeContent(current);
+            pending.setAfterContent(content);
+            pending.setModifyTime(LocalDateTime.now());
+            modifyMapper.insert(pending);
+        } else {
+            pending.setAfterContent(content);
+            pending.setModifyTime(LocalDateTime.now());
+            modifyMapper.updateById(pending);
+        }
+
+        return updateArticleContent(id, modifyType, content, null) > 0;
+    }
+
+    @Transactional
+    private boolean saveManualContent(Long id, String modifyType, String rawContent, Integer status) {
+        CdcArticle article = getArticleOrThrow(id);
+        String content = normalizeContent(rawContent);
+        String current = normalizeContent(getContent(article, modifyType));
+        CdcArticleModification pending = modifyMapper.getPending(id, modifyType);
+        String baseline = pending == null ? current : normalizeContent(pending.getBeforeContent());
+
+        if (pending != null) {
+            if (Objects.equals(baseline, content)) {
+                modifyMapper.deleteById(pending.getId());
+            } else {
+                pending.setOperationType("manual_edit");
+                pending.setAfterContent(content);
+                pending.setModifyTime(LocalDateTime.now());
+                modifyMapper.updateById(pending);
+            }
+        } else if (!Objects.equals(current, content)) {
+            CdcArticleModification modification = new CdcArticleModification();
+            modification.setArticleId(id);
+            modification.setModifyType(modifyType);
+            modification.setOperationType("manual_edit");
+            modification.setBeforeContent(current);
+            modification.setAfterContent(content);
+            modification.setModifyTime(LocalDateTime.now());
+            modifyMapper.insert(modification);
+        }
+
+        return updateArticleContent(id, modifyType, content, status) > 0;
+    }
+
+    private int updateArticleContent(Long id, String modifyType, String content, Integer status) {
+        CdcArticle up = new CdcArticle();
+        up.setId(id);
+        up.setStatus(status);
+        if ("outline".equals(modifyType)) {
+            up.setOutline(content);
+            return articleMapper.updateOutline(up);
+        }
+        up.setInitialDraft(content);
+        return articleMapper.updateInitialDraft(up);
+    }
+
+    private String getContent(CdcArticle article, String modifyType) {
+        return "outline".equals(modifyType) ? article.getOutline() : article.getInitialDraft();
+    }
+
+    private String normalizeContent(String content) {
+        if (content == null) return "";
+        String value = content;
+        for (int i = 0; i < 6; i++) {
+            String trimmed = value.trim();
+            if (trimmed.length() < 2 || !trimmed.startsWith("\"") || !trimmed.endsWith("\"")) break;
+            if (trimmed.startsWith("\"#") || trimmed.startsWith("\"##")) {
+                value = trimmed.substring(1, trimmed.length() - 1);
+                continue;
+            }
+            try {
+                String decoded = objectMapper.readValue(trimmed, String.class);
+                if (decoded == null) break;
+                value = decoded;
+            } catch (Exception e) {
+                String inner = trimmed.substring(1, trimmed.length() - 1);
+                if (!inner.contains("\\n") && !inner.contains("\\\"") && !inner.contains("\\\\")) break;
+                value = inner
+                        .replace("\\r\\n", "\n")
+                        .replace("\\n", "\n")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\");
+            }
+        }
+        return value.replace("\r\n", "\n");
+    }
+
     @Override
     public boolean revertToModification(Long articleId, Long modificationId) {
-        CdcArticleModification mod = modifyMapper.getById(modificationId);
-        if (mod == null || !mod.getArticleId().equals(articleId)) {
+        CdcArticleModification mod = getModifications(articleId).stream()
+                .filter(item -> Objects.equals(item.getId(), modificationId))
+                .findFirst()
+                .orElse(null);
+        if (mod == null) {
             throw new RuntimeException("修改记录不存在");
         }
 
@@ -817,7 +881,84 @@ public class ArticleServiceImpl implements ArticleService {
 
     @Override
     public List<CdcArticleModification> getModifications(Long articleId) {
-        return modifyMapper.listByArticleId(articleId);
+        List<CdcArticleModification> modifications = new ArrayList<>(modifyMapper.listByArticleId(articleId));
+        modifications.sort(Comparator
+                .comparing(CdcArticleModification::getModifyTime, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(CdcArticleModification::getId, Comparator.nullsFirst(Comparator.naturalOrder())));
+
+        Map<String, String> lastContent = new HashMap<>();
+        Map<String, String> generatedContent = getGeneratedContent(articleId);
+        List<CdcArticleModification> resolved = new ArrayList<>();
+
+        for (CdcArticleModification modification : modifications) {
+            String type = modification.getModifyType();
+            String rawBefore = modification.getBeforeContent();
+            String rawAfter = modification.getAfterContent();
+            String before = normalizeContent(rawBefore);
+            String after = normalizeContent(rawAfter);
+
+            if ("manual_edit".equals(modification.getOperationType())
+                    && isLegacyEscapingOnlyDifference(rawBefore, rawAfter, before, after)) {
+                continue;
+            }
+
+            // Older clients auto-saved first and then wrote an encoded copy of the same text.
+            // Reconstruct that record from the previous committed snapshot when possible.
+            if ("manual_edit".equals(modification.getOperationType())
+                    && Objects.equals(before, after)
+                    && lastContent.containsKey(type)
+                    && !Objects.equals(lastContent.get(type), after)) {
+                before = lastContent.get(type);
+            } else if ("manual_edit".equals(modification.getOperationType())
+                    && Objects.equals(before, after)
+                    && !lastContent.containsKey(type)) {
+                before = generatedContent.get(type);
+            }
+
+            if (before == null) before = "";
+            if (after == null) after = "";
+            modification.setBeforeContent(before);
+            modification.setAfterContent(after);
+
+            // Do not show historical no-op saves that only changed JSON escaping.
+            if (Objects.equals(before, after) && "manual_edit".equals(modification.getOperationType())) {
+                continue;
+            }
+
+            resolved.add(modification);
+            if (!after.isEmpty()) lastContent.put(type, after);
+        }
+
+        Collections.reverse(resolved);
+        return resolved;
+    }
+
+    private boolean isLegacyEscapingOnlyDifference(String rawBefore, String rawAfter,
+                                                   String before, String after) {
+        boolean encoded = (rawBefore != null && rawBefore.trim().startsWith("\""))
+                || (rawAfter != null && rawAfter.trim().startsWith("\""));
+        if (!encoded || Objects.equals(before, after)) return false;
+        return Objects.equals(before.replace("\\", "").replace("\"", ""),
+                after.replace("\\", "").replace("\"", ""));
+    }
+
+    private Map<String, String> getGeneratedContent(Long articleId) {
+        Map<String, String> generated = new HashMap<>();
+        List<CdcAgentTrace> traces = new ArrayList<>(traceMapper.listByArticleId(articleId));
+        traces.sort(Comparator.comparing(CdcAgentTrace::getId, Comparator.nullsFirst(Comparator.naturalOrder())));
+        for (CdcAgentTrace trace : traces) {
+            String type = "generate_outline".equals(trace.getStepName()) ? "outline"
+                    : "generate_draft".equals(trace.getStepName()) ? "initial_draft" : null;
+            if (type == null || generated.containsKey(type)) continue;
+            try {
+                Map<?, ?> payload = objectMapper.readValue(trace.getStepContent(), Map.class);
+                Object result = payload.get("result");
+                if (result != null) generated.put(type, normalizeContent(String.valueOf(result)));
+            } catch (Exception ignored) {
+                // Trace content is optional; the previous modification remains the fallback.
+            }
+        }
+        return generated;
     }
 
     @Override
