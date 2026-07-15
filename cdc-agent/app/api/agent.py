@@ -12,7 +12,10 @@ from app.skills.flow.section_analyze_skill import SectionAnalyzeSkill
 from app.skills.flow.image_generate_skill import ImageGenerateSkill
 from app.tools.vector_store import VectorStore
 from app.core.config import settings
-from app.core.streaming import ParagraphStreamBuffer
+from app.core.streaming import (
+    reset_stream_callback,
+    set_stream_callback,
+)
 from loguru import logger
 from pathlib import Path
 import uuid
@@ -217,18 +220,6 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def _split_stream_chunks(text: str):
-    """按自然边界切分文本，避免一次性把大篇幅内容塞给前端。"""
-    if not text:
-        return
-
-    buffer = ParagraphStreamBuffer()
-    yield from buffer.push(text)
-    remaining = buffer.flush()
-    if remaining:
-        yield remaining
-
-
 @router.post("/generate/stream")
 async def generate_stream(request: AgentRequest):
     """SSE 流式生成接口，输出 progress/delta/done/error 事件。"""
@@ -241,6 +232,7 @@ async def generate_stream(request: AgentRequest):
         start_time = time.time()
         result_state = {}
         streamed_chunks = []
+        callback_token = None
 
         try:
             yield _sse("progress", {"message": "开始生成", "step": request.step})
@@ -251,15 +243,15 @@ async def generate_stream(request: AgentRequest):
                 if delta:
                     await queue.put(delta)
 
+            callback_token = set_stream_callback(stream_callback)
+
             if request.step == "outline":
                 state = _build_outline_state(request)
                 state_dict = state if isinstance(state, dict) else state.model_dump()
-                state_dict["_stream_callback"] = stream_callback
                 task = asyncio.create_task(_run_langgraph(outline_workflow, state_dict))
             elif request.step == "draft":
                 state = _build_draft_state(request)
                 state_dict = state if isinstance(state, dict) else state.model_dump()
-                state_dict["_stream_callback"] = stream_callback
                 task = asyncio.create_task(_run_langgraph(draft_workflow, state_dict))
             else:
                 raise ValueError(f"未知的step类型: {request.step}")
@@ -267,6 +259,12 @@ async def generate_stream(request: AgentRequest):
             while not task.done() or not queue.empty():
                 try:
                     chunk = await asyncio.wait_for(queue.get(), timeout=0.2)
+                    if not streamed_chunks:
+                        first_chunk_ms = int((time.time() - start_time) * 1000)
+                        logger.info(
+                            f"SSE 首段到达: article_id={request.article_id}, "
+                            f"step={request.step}, cost={first_chunk_ms}ms"
+                        )
                     streamed_chunks.append(chunk)
                     yield _sse("delta", {"delta": chunk})
                 except asyncio.TimeoutError:
@@ -281,11 +279,10 @@ async def generate_stream(request: AgentRequest):
 
             full_text = "".join(streamed_chunks)
             if not full_text:
-                yield _sse("progress", {"message": "文本生成完成，正在分段输出", "step": request.step})
-                for chunk in _split_stream_chunks(content):
-                    full_text += chunk
-                    yield _sse("delta", {"delta": chunk})
-                    await asyncio.sleep(0.08)
+                raise RuntimeError(
+                    "模型生成已结束，但没有收到任何实时 SSE 文本增量；"
+                    "已拒绝使用生成完成后的伪流式输出"
+                )
             elif full_text != content and content.startswith(full_text):
                 tail = content[len(full_text):]
                 if tail:
@@ -328,6 +325,10 @@ async def generate_stream(request: AgentRequest):
             tb = traceback.format_exc()
             logger.error("流式生成失败: type={}, msg={}, traceback:\n{}", type(e).__name__, str(e), tb)
             yield _sse("error", {"message": f"{type(e).__name__}: {str(e) or '(无详细信息)'}"})
+
+        finally:
+            if callback_token is not None:
+                reset_stream_callback(callback_token)
 
     return StreamingResponse(
         event_generator(),

@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from app.skills.base import BaseSkill, SkillMetadata
 from app.core.llm import LLMClient
-from app.core.streaming import ParagraphStreamBuffer
+from app.core.streaming import ParagraphStreamBuffer, get_stream_callback
 from app.prompts.outline_generate import OUTLINE_GENERATE_PROMPT
 from loguru import logger
 
@@ -81,7 +81,7 @@ class OutlineGenerateSkill(BaseSkill):
             logger.debug("OutlineGenerateSkill: 使用固定模板（回退模式）")
 
         messages = [{"role": "user", "content": prompt}]
-        stream_callback = state.get("_stream_callback")
+        stream_callback = get_stream_callback() or state.get("_stream_callback")
         if stream_callback:
             chunks = []
             paragraph_buffer = ParagraphStreamBuffer()

@@ -217,12 +217,15 @@ class LLMClient:
         # 模型级额外参数（来自 DB cdc_llm_config.params），如 {"thinking": {"type": "disabled"}}
         self.extra_params = extra_params or {}
 
-    def _build_headers(self) -> Dict[str, str]:
+    def _build_headers(self, stream: bool = False) -> Dict[str, str]:
         """构建 OpenAI-compatible 请求头。"""
-        return {
+        headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        if stream:
+            headers["Accept"] = "text/event-stream"
+        return headers
 
     # ------------------------------------------------------------------
     # Public: simple chat (returns content string)
@@ -318,10 +321,12 @@ class LLMClient:
         body: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "stream": True,
         }
         body.update({k: v for k, v in self.extra_params.items() if v is not None})
         body.update({k: v for k, v in kwargs.items() if v is not None})
+        # Streaming is part of this method's contract and must not be
+        # overridden by a saved model parameter.
+        body["stream"] = True
 
         async with _LLM_SEMAPHORE:
             try:
@@ -329,7 +334,7 @@ class LLMClient:
                     async with client.stream(
                         "POST",
                         f"{self.base_url}/chat/completions",
-                        headers=self._build_headers(),
+                        headers=self._build_headers(stream=True),
                         json=body,
                     ) as response:
                         if response.status_code != 200:
@@ -340,6 +345,9 @@ class LLMClient:
                             human_msg = _humanize_error(response.status_code, err_body, self.model)
                             logger.error(f"LLM流式调用失败 [{self.model}]: HTTP {response.status_code} - {human_msg}")
                             raise LLMError(f"LLM调用失败: {human_msg}")
+
+                        received_events = 0
+                        emitted_content = False
 
                         async for line in response.aiter_lines():
                             if not line or line.startswith(":"):
@@ -356,6 +364,8 @@ class LLMClient:
                             except json.JSONDecodeError:
                                 continue
 
+                            received_events += 1
+
                             if usage is not None and data.get("usage"):
                                 u = data.get("usage", {})
                                 usage.add_usage(
@@ -366,10 +376,22 @@ class LLMClient:
                             choices = data.get("choices", [])
                             if not choices:
                                 continue
-                            delta = choices[0].get("delta", {})
+                            delta = choices[0].get("delta", {}) or {}
                             content = delta.get("content")
-                            if content:
+                            if isinstance(content, str) and content:
+                                emitted_content = True
                                 yield content
+                            elif isinstance(content, list):
+                                for part in content:
+                                    if isinstance(part, dict) and part.get("text"):
+                                        emitted_content = True
+                                        yield str(part["text"])
+
+                        if not emitted_content:
+                            raise LLMError(
+                                f"模型 {self.model} 未返回可用的 SSE 文本增量"
+                                f"（收到 {received_events} 个事件）。请确认模型和 Base URL 支持 OpenAI 流式输出。"
+                            )
             except httpx.TimeoutException:
                 logger.warning(f"LLM流式请求超时 [{self.model}] (read={_REQUEST_TIMEOUT.read}s)")
                 raise LLMError("模型响应超时，请稍后重试或换一个更快的模型")

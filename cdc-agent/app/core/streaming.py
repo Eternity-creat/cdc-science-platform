@@ -1,6 +1,27 @@
 """Helpers for sending generation output in readable SSE units."""
 
 import re
+from contextvars import ContextVar, Token
+from typing import Awaitable, Callable, Optional
+
+
+StreamCallback = Callable[[str], Awaitable[None]]
+_stream_callback: ContextVar[Optional[StreamCallback]] = ContextVar(
+    "cdc_stream_callback",
+    default=None,
+)
+
+
+def set_stream_callback(callback: StreamCallback) -> Token:
+    return _stream_callback.set(callback)
+
+
+def reset_stream_callback(token: Token) -> None:
+    _stream_callback.reset(token)
+
+
+def get_stream_callback() -> Optional[StreamCallback]:
+    return _stream_callback.get()
 
 
 class ParagraphStreamBuffer:
