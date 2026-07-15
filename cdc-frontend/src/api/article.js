@@ -53,7 +53,7 @@ export const listArticlesPaged = async (page, size, status, keyword) => {
 };
 
 /** 获取文章详情 */
-export const getArticle = async (id) => normalizeArticleDetail(await get(`/article/${id}`));
+export const getArticle = async (id) => normalizeArticleDetail(await get(`/article/${id}`, { cache: 'no-store' }));
 
 /** 删除文章（级联清理留痕 + 轨迹） */
 export const deleteArticle = (id) => del(`/article/${id}`);

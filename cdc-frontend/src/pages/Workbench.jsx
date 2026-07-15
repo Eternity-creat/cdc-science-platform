@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { diffWordsWithSpace } from 'diff';
+import { diffLines, diffWordsWithSpace } from 'diff';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
@@ -186,6 +186,37 @@ function buildModificationDiff(before = '', after = '') {
     insertions: changes.filter(change => change.kind === 'insertion').length,
     total: changes.length,
   };
+}
+
+function buildContextChanges(before = '', after = '') {
+  const parts = diffLines(before, after);
+  const changes = [];
+  let index = 0;
+
+  while (index < parts.length) {
+    if (!parts[index].removed && !parts[index].added) {
+      index += 1;
+      continue;
+    }
+
+    let removed = '';
+    let added = '';
+    while (index < parts.length && (parts[index].removed || parts[index].added)) {
+      if (parts[index].removed) removed += parts[index].value;
+      if (parts[index].added) added += parts[index].value;
+      index += 1;
+    }
+
+    if (removed.trim() || added.trim()) {
+      changes.push({
+        kind: removed.trim() && added.trim() ? 'replacement' : removed.trim() ? 'deletion' : 'insertion',
+        before: removed.trim(),
+        after: added.trim(),
+      });
+    }
+  }
+
+  return changes;
 }
 
 /* ===== Outline Tree Item ===== */
@@ -675,6 +706,7 @@ export default function Workbench() {
       onConfirm: async () => {
         setConfirmDialog(null);
         try {
+          await flushAutoSaveBeforeManualSave();
           const reverted = await articleApi.revertToModification(id, modificationId);
           if (!reverted) throw new Error('回退未完成，请刷新后重试');
           // Reload article
@@ -1326,6 +1358,7 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
 
 function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
   const diff = buildModificationDiff(mod.before, mod.after);
+  const contextChanges = buildContextChanges(mod.before, mod.after);
   const fullDiff = diffWordsWithSpace(mod.before, mod.after);
 
   return createPortal(
@@ -1368,7 +1401,7 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
 
             <div>
               <div className="mb-2 text-xs font-semibold text-foreground">关键变更</div>
-              <DiffList title="精确变更内容" changes={diff.changes} />
+              <DiffList title="完整变更段落" changes={contextChanges} />
             </div>
 
             <div>

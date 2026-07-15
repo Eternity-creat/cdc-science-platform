@@ -44,7 +44,7 @@ async function request(url, options = {}) {
   }
 }
 
-export const get = (url) => request(url);
+export const get = (url, options = {}) => request(url, options);
 
 export const post = (url, data) =>
   request(url, { method: 'POST', body: JSON.stringify(data) });

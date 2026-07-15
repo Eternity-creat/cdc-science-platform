@@ -844,7 +844,10 @@ public class ArticleServiceImpl implements ArticleService {
         revertMod.setModifyTime(LocalDateTime.now());
 
         if ("outline".equals(mod.getModifyType())) {
-            currentContent = article.getOutline();
+            currentContent = normalizeContent(article.getOutline());
+            restoreContent = normalizeContent(restoreContent);
+            CdcArticleModification pending = modifyMapper.getPending(articleId, "outline");
+            if (pending != null) modifyMapper.deleteById(pending.getId());
             revertMod.setModifyType("outline");
             revertMod.setBeforeContent(currentContent);
             revertMod.setAfterContent(restoreContent);
@@ -858,7 +861,10 @@ public class ArticleServiceImpl implements ArticleService {
             }
             return true;
         } else if ("initial_draft".equals(mod.getModifyType())) {
-            currentContent = article.getInitialDraft();
+            currentContent = normalizeContent(article.getInitialDraft());
+            restoreContent = normalizeContent(restoreContent);
+            CdcArticleModification pending = modifyMapper.getPending(articleId, "initial_draft");
+            if (pending != null) modifyMapper.deleteById(pending.getId());
             revertMod.setModifyType("initial_draft");
             revertMod.setBeforeContent(currentContent);
             revertMod.setAfterContent(restoreContent);
