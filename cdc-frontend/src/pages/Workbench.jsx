@@ -120,7 +120,11 @@ function normalizeModificationContent(content) {
         .replace(/\\\\/g, '\\');
     }
   }
-  return value.replace(/\r\n/g, '\n');
+  value = value.replace(/\r\n/g, '\n');
+  if (value.includes('\\n') && !value.includes('\n')) {
+    value = value.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+  }
+  return value;
 }
 
 function makeContentPreview(content, max = 90) {

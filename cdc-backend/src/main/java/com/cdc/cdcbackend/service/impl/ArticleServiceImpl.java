@@ -811,7 +811,11 @@ public class ArticleServiceImpl implements ArticleService {
                         .replace("\\\\", "\\");
             }
         }
-        return value.replace("\r\n", "\n");
+        value = value.replace("\r\n", "\n");
+        if (value.contains("\\n") && !value.contains("\n")) {
+            value = value.replace("\\r\\n", "\n").replace("\\n", "\n");
+        }
+        return value;
     }
 
     @Override
