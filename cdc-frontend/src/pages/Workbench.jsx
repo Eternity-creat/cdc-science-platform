@@ -72,14 +72,79 @@ function parseOutlineToTree(outlineStr) {
   return items;
 }
 
+function safeParseJson(value) {
+  if (!value || typeof value !== 'string') return value || {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return { raw: value };
+  }
+}
+
+function compactTraceText(value, max = 180) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value || {}, null, 2);
+  const normalized = normalizeModificationContent(text).replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length > max ? `${normalized.slice(0, max)}...` : normalized;
+}
+
+function countContentUnits(text) {
+  const content = normalizeModificationContent(text || '');
+  const headings = (content.match(/^#{1,6}\s+/gm) || []).length;
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map(item => item.trim())
+    .filter(Boolean).length;
+  return Math.max(headings, paragraphs);
+}
+
+const TRACE_STEP_META = {
+  generate_outline: {
+    label: '生成大纲',
+    description: '根据文章需求、模板约束和知识库上下文组织文章结构。',
+    workItems: ['解析主题、对象、人群与模板参数', '提炼知识库依据和内容边界', '生成章节层级与写作路径'],
+  },
+  generate_draft: {
+    label: '生成初稿',
+    description: '基于已确认大纲扩写正文，并补充科普表达、问答和注意事项。',
+    workItems: ['承接大纲逐段扩写正文', '融合疾病/疫苗知识点和引用线索', '优化语言风格、段落节奏与可读性'],
+  },
+  regenerate_outline: {
+    label: '重新生成大纲',
+    description: '根据当前要求重新组织文章结构，并保留旧版本记录。',
+    workItems: ['读取已有大纲与修改意图', '重新规划章节顺序', '生成新的大纲版本'],
+  },
+  regenerate_draft: {
+    label: '重新生成初稿',
+    description: '结合新增要求和当前内容重新扩写初稿。',
+    workItems: ['分析当前初稿与新增要求', '补充或重写相关段落', '输出新的正文版本'],
+  },
+};
+
 function parseTraceToSteps(traceList) {
   if (!traceList || traceList.length === 0) return [];
-  return traceList.map((t, i) => ({
-    id: i + 1,
-    name: t.stepName || `步骤${i + 1}`,
-    status: 'success',
-    costTime: t.costTime || null,
-  }));
+  return traceList.map((t, i) => {
+    const payload = safeParseJson(t.stepContent);
+    const params = payload?.params ?? payload?.input ?? payload?.raw ?? '';
+    const result = payload?.result ?? payload?.output ?? '';
+    const resultText = normalizeModificationContent(result || '');
+    const meta = TRACE_STEP_META[t.stepName] || {};
+    return {
+      id: t.id || i + 1,
+      name: meta.label || t.stepName || `步骤${i + 1}`,
+      rawName: t.stepName || '',
+      status: 'success',
+      costTime: t.costTime || null,
+      description: meta.description || '完成一次 Agent 处理任务并写入结果。',
+      workItems: meta.workItems || ['读取输入参数', '调用模型生成内容', '保存处理结果和轨迹'],
+      inputPreview: compactTraceText(params, 220),
+      outputPreview: compactTraceText(resultText, 260),
+      outputChars: resultText.length,
+      outputSections: countContentUnits(resultText),
+      modelUsed: t.modelUsed || '',
+      createTime: t.createTime || '',
+    };
+  });
 }
 
 function parseModifications(modList) {
