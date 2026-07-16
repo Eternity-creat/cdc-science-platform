@@ -323,11 +323,13 @@ export default function Workbench() {
   const [showPreview, setShowPreview] = useState(false);
   const [showOutlineTree, setShowOutlineTree] = useState(true);
   const [streamingText, setStreamingText] = useState('');
+  const [revertingId, setRevertingId] = useState(null);
 
   /* Refs for auto-save */
   const autoSaveTimer = useRef(null);
   const autoSavePromise = useRef(null);
   const lastAutoSaveField = useRef(null);
+  const isRevertingRef = useRef(false);
   const draftTextareaRef = useRef(null);
   const draftPreviewScrollRef = useRef(null);
   const finalPreviewScrollRef = useRef(null);
@@ -406,6 +408,7 @@ export default function Workbench() {
 
   /* ===== Auto-save ===== */
   const scheduleAutoSave = useCallback((field, content) => {
+    if (isRevertingRef.current) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       autoSaveTimer.current = null;
@@ -430,6 +433,21 @@ export default function Workbench() {
     if (autoSavePromise.current) {
       await autoSavePromise.current.catch(() => {});
     }
+  }, []);
+
+  const applyArticleSnapshot = useCallback((art) => {
+    if (!art?.id) return false;
+    const nextOutline = art.outline || '';
+    const nextDraft = art.initialDraft || '';
+    const nextFinal = art.finalArticle || '';
+    setArticle(art);
+    setOutline(nextOutline);
+    setEditOutline(nextOutline);
+    setOutlineItems(parseOutlineToTree(nextOutline));
+    setDraftText(nextDraft);
+    setEditDraft(nextDraft);
+    setFinalText(nextFinal);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -725,6 +743,29 @@ export default function Workbench() {
         }
       },
     });
+  };
+
+  const handleRevertNow = async (modificationId) => {
+    if (!modificationId || revertingId) return;
+    setRevertingId(modificationId);
+    isRevertingRef.current = true;
+    try {
+      await flushAutoSaveBeforeManualSave();
+      const art = await articleApi.revertToModification(id, modificationId);
+      if (!applyArticleSnapshot(art)) {
+        throw new Error('回退未完成，请刷新后重试');
+      }
+      const mods = await articleApi.getModifications(id).catch(() => []);
+      setModifications(parseModifications(mods));
+      setAutoSavedAt(null);
+      toast.success('已回退到修改前版本');
+    } catch (e) {
+      console.error('回退失败:', e);
+      toast.error('回退失败', { description: e.message || '请重试' });
+    } finally {
+      isRevertingRef.current = false;
+      setRevertingId(null);
+    }
   };
 
   const toggleOutline = useCallback((item) => {
@@ -1075,7 +1116,8 @@ export default function Workbench() {
             pipelineSteps={pipelineSteps}
             modifications={modifications}
             context={context}
-            onRevert={handleRevert}
+            onRevert={handleRevertNow}
+            revertingId={revertingId}
             articleId={id}
             draftContent={editDraft || draftText}
             segments={context?.segments || []}
@@ -1202,8 +1244,9 @@ export default function Workbench() {
           pipelineSteps={pipelineSteps}
           modifications={modifications}
           context={context}
-          onRevert={handleRevert}
-          readonly
+          onRevert={handleRevertNow}
+          readonly={article?.status >= 5}
+          revertingId={revertingId}
           articleId={id}
           draftContent={draftText || finalText}
           segments={context?.segments || []}
@@ -1266,7 +1309,7 @@ function GenerationStrip({ label, length, type }) {
 
 /* ===== Right Panel Component ===== */
 
-function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
+function ModificationCard({ mod, index, readonly, onRevert, onOpen, revertingId }) {
   const diff = buildModificationDiff(mod.before, mod.after);
   const changes = diff.changes.slice(0, 3);
   const delta = mod.summary?.deltaChars || 0;
@@ -1337,9 +1380,10 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
               variant="ghost"
               size="sm"
               className="h-auto gap-1 px-1.5 py-0.5 text-[10px]"
+              disabled={!!revertingId}
               onClick={() => onRevert(mod.id)}
             >
-              <RotateCcw size={10} /> 回退到修改前
+              {revertingId === mod.id ? <Loader2 size={10} className="animate-spin" /> : <RotateCcw size={10} />} 回退到修改前
             </Button>
           </div>
         )}
@@ -1348,7 +1392,7 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen }) {
   );
 }
 
-function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
+function ModificationDetailModal({ mod, readonly, onClose, onRevert, revertingId }) {
   const diff = buildModificationDiff(mod.before, mod.after);
   const contextChanges = buildContextChanges(mod.before, mod.after);
   const fullDiff = diffWordsWithSpace(mod.before, mod.after);
@@ -1412,12 +1456,13 @@ function ModificationDetailModal({ mod, readonly, onClose, onRevert }) {
               variant="outline"
               size="sm"
               className="gap-1.5"
+              disabled={!!revertingId}
               onClick={() => {
                 onClose();
                 onRevert(mod.id);
               }}
             >
-              <RotateCcw size={13} /> 回退到修改前
+              {revertingId === mod.id ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} 回退到修改前
             </Button>
           )}
           <Button size="sm" onClick={onClose}>关闭</Button>
@@ -1469,7 +1514,7 @@ function FullContentBlock({ title, parts, side }) {
   );
 }
 
-function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, context, onRevert, readonly, articleId, draftContent, segments, onInsertImage }) {
+function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, context, onRevert, readonly, revertingId, articleId, draftContent, segments, onInsertImage }) {
   const [selectedMod, setSelectedMod] = useState(null);
 
   return (
@@ -1519,6 +1564,7 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                   readonly={readonly}
                   onRevert={onRevert}
                   onOpen={setSelectedMod}
+                  revertingId={revertingId}
                 />
               )) : (
                 <div className="py-10 text-center text-muted-foreground">
@@ -1533,6 +1579,7 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
               readonly={readonly}
               onClose={() => setSelectedMod(null)}
               onRevert={onRevert}
+              revertingId={revertingId}
             />
           )}
         </TabsContent>

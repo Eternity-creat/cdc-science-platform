@@ -20,6 +20,7 @@
 
     <update id="updateInitialDraft" parameterType="CdcArticle">
         UPDATE cdc_article SET initial_draft=#{initialDraft}
+        <if test="status != null and status &gt;= 4">, final_article=#{initialDraft}</if>
         <if test="status != null">, status=#{status}</if>
         , update_time=NOW()
         WHERE id=#{id}
@@ -28,6 +29,7 @@
     <update id="updateFinalArticle" parameterType="CdcArticle">
         UPDATE cdc_article
         SET final_article=#{finalArticle}, status=#{status}
+        , update_time=NOW()
         WHERE id=#{id}
     </update>
 

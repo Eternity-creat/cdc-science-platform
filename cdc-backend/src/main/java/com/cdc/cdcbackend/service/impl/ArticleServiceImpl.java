@@ -861,10 +861,15 @@ public class ArticleServiceImpl implements ArticleService {
             }
             return getArticleOrThrow(articleId);
         } else if ("initial_draft".equals(mod.getModifyType())) {
-            currentContent = normalizeContent(article.getInitialDraft());
+            boolean syncFinal = article.getStatus() != null && article.getStatus() >= 4;
+            currentContent = normalizeContent(syncFinal && article.getFinalArticle() != null
+                    ? article.getFinalArticle()
+                    : article.getInitialDraft());
             restoreContent = normalizeContent(restoreContent);
             CdcArticleModification pending = modifyMapper.getPending(articleId, "initial_draft");
             if (pending != null) modifyMapper.deleteById(pending.getId());
+            CdcArticleModification finalPending = modifyMapper.getPending(articleId, "final_article");
+            if (finalPending != null) modifyMapper.deleteById(finalPending.getId());
             revertMod.setModifyType("initial_draft");
             revertMod.setBeforeContent(currentContent);
             revertMod.setAfterContent(restoreContent);
@@ -873,6 +878,7 @@ public class ArticleServiceImpl implements ArticleService {
             CdcArticle up = new CdcArticle();
             up.setId(articleId);
             up.setInitialDraft(restoreContent);
+            up.setStatus(syncFinal ? article.getStatus() : null);
             if (articleMapper.updateInitialDraft(up) <= 0) {
                 throw new RuntimeException("回退版本写入失败");
             }
