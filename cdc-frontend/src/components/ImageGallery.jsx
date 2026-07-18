@@ -38,7 +38,23 @@ function parseSectionsFromDraft(content) {
   return sections;
 }
 
-function getImageDisplayInfo(img) {
+/**
+ * 在文章 heading 列表中查找与 sectionTitle 匹配的 heading 索引。
+ * 支持精确匹配和包含匹配。
+ */
+function findHeadingIndex(sectionTitle, sections) {
+  if (!sectionTitle || !sections?.length) return -1;
+  const t = sectionTitle.trim().toLowerCase();
+  // 精确匹配
+  const exact = sections.findIndex((s) => s.title.trim().toLowerCase() === t);
+  if (exact >= 0) return exact;
+  // 包含匹配（sectionTitle 包含 heading 或 heading 包含 sectionTitle）
+  return sections.findIndex(
+    (s) => s.title.toLowerCase().includes(t) || t.includes(s.title.toLowerCase())
+  );
+}
+
+function getImageDisplayInfo(img, draftContent) {
   const promptMeta = extractImagePromptMeta(img?.generationPrompt || img?.prompt || '');
   const rawCaption = String(img?.caption || '').trim();
   const captionLooksPrompt = rawCaption.length > 40 && (
@@ -46,13 +62,28 @@ function getImageDisplayInfo(img) {
     rawCaption.includes('段落内容') ||
     rawCaption.includes('为健康科普文章生成')
   );
-  const sectionNo = parseSectionNoFromTitle(promptMeta.sectionTitle)
-    ?? (img?.position == null ? null : Number(img.position) + 1);
+
+  // 通过匹配实际文章 heading 确定段落号（最可靠）
+  let sectionNo = null;
+  if (promptMeta.sectionTitle && draftContent) {
+    const sections = parseSectionsFromDraft(draftContent);
+    const headingIdx = findHeadingIndex(promptMeta.sectionTitle, sections);
+    if (headingIdx >= 0) {
+      sectionNo = headingIdx + 1; // 显示为 1-based
+    }
+  }
+
+  // fallback: 如果没有 draftContent 或匹配失败，用 position
+  if (sectionNo == null && img?.position != null) {
+    sectionNo = Number(img.position) + 1;
+  }
+
   const title = promptMeta.sectionTitle || (!captionLooksPrompt ? rawCaption : '') || (sectionNo ? `第 ${sectionNo} 部分配图` : '配图');
 
   return {
     sectionNo,
-    sectionLabel: sectionNo ? `第 ${sectionNo} 部分` : '推荐位置',
+    sectionTitle: promptMeta.sectionTitle,
+    sectionLabel: sectionNo ? `第 ${sectionNo} 部分` : '',
     title,
     content: promptMeta.sectionContent,
     topic: promptMeta.topic,
@@ -125,6 +156,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
 
   const saveGeneratedImages = async (generatedImages) => {
     const validImages = [];
+    const sections = parseSectionsFromDraft(draftContent);
 
     for (const [idx, img] of generatedImages.entries()) {
       const filePath = normalizeImageSrc(img.file_path || img.filePath || img.url || '');
@@ -134,12 +166,21 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
 
       const sectionTitle = img.section_title || img.sectionTitle || '';
 
+      // 用 section_title 匹配实际文章 heading 确定正确 position
+      let position = img.section_index ?? img.position ?? idx;
+      if (sectionTitle && sections.length > 0) {
+        const headingIdx = findHeadingIndex(sectionTitle, sections);
+        if (headingIdx >= 0) {
+          position = headingIdx;
+        }
+      }
+
       validImages.push({
         articleId: parseInt(articleId, 10),
         imageKey: img.image_key || img.imageKey || `img_${String(Date.now()).slice(-6)}_${idx + 1}`,
         filePath,
-        caption: img.caption || sectionTitle || `第 ${(img.section_index ?? img.position ?? idx) + 1} 部分配图`,
-        position: img.section_index ?? img.position ?? idx,
+        caption: img.caption || sectionTitle || `第 ${position + 1} 部分配图`,
+        position,
         generatedBy: img.generated_by || img.generatedBy || 'SenseNova-U1-Lite',
         generationPrompt: img.prompt || img.generation_prompt || '',
         width: img.width || null,
@@ -232,17 +273,17 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
         fileSize: uploaded.fileSize || compressed.size,
         status: 1,
       };
-      await galleryApi.saveImage(savedImage);
+      const dbImage = await galleryApi.saveImage(savedImage);
 
       // 解析段落并弹出插入确认对话框
       const sections = parseSectionsFromDraft(draftContent);
       const uploadInfo = {
         ...savedImage,
-        id: `upload_${Date.now()}`,
+        id: dbImage?.id || `upload_${Date.now()}`,
         sections,
       };
       setPendingUpload(uploadInfo);
-      setSelectedSection(Math.min(sections.length, 1)); // 默认选中第一个段落（0 = "文章开头"）
+      setSelectedSection(Math.min(sections.length, 1));
       await loadImages();
     } catch (e) {
       console.error('上传图片失败:', e);
@@ -296,7 +337,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
   }, [pendingInsert, onInsertImage]);
 
   /* Confirm upload insert from section selection dialog */
-  const confirmUploadInsert = useCallback(() => {
+  const confirmUploadInsert = useCallback(async () => {
     if (!pendingUpload) return;
     const sections = pendingUpload.sections || [];
     const totalSections = sections.length;
@@ -327,11 +368,22 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
       generationPrompt: sectionTitle ? `段落标题: ${sectionTitle}` : '',
     };
 
+    // 将用户选择的段落信息持久化到 DB（position + generationPrompt）
+    const dbId = pendingUpload.id;
+    if (dbId && typeof dbId === 'number') {
+      try {
+        await galleryApi.updateImage(dbId, imgForInsert);
+      } catch (e) {
+        console.warn('更新上传图片段落信息失败:', e);
+      }
+    }
+
     if (onInsertImage) {
       onInsertImage(imgForInsert, { align: 'center', width: 720, insertAt });
     }
     setPendingUpload(null);
-  }, [pendingUpload, selectedSection, onInsertImage]);
+    await loadImages(); // 刷新以更新 badge 显示
+  }, [pendingUpload, selectedSection, onInsertImage, loadImages]);
 
   /* ===== Render ===== */
   const hasImages = images.length > 0;
@@ -452,7 +504,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                 {images.map((img, idx) => {
                   const status = imageStatus[img.id] || (img.filePath ? 'checking' : 'error');
                   const canUseImage = Boolean(img.filePath) && status !== 'error';
-                  const info = getImageDisplayInfo(img);
+                  const info = getImageDisplayInfo(img, draftContent);
                   const isDeleting = deletingId === img.id;
                   const placeholderText = !img.filePath
                     ? '无图片路径'
@@ -646,12 +698,12 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
               </p>
               <p className="text-[12px] text-muted-foreground mt-1">
                 将插入到 <span className="font-medium text-primary">{(() => {
-                  const info = getImageDisplayInfo(pendingInsert);
-                  return info.sectionTitle || info.sectionLabel;
+                  const info = getImageDisplayInfo(pendingInsert, draftContent);
+                  return info.sectionTitle || info.title || info.sectionLabel;
                 })()}</span> 段落后方
               </p>
               {(() => {
-                const info = getImageDisplayInfo(pendingInsert);
+                const info = getImageDisplayInfo(pendingInsert, draftContent);
                 return info.content ? (
                   <p className="text-[11px] text-muted-foreground/70 mt-1.5 line-clamp-2">
                     {info.content}
