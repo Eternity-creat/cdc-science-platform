@@ -14,7 +14,9 @@ from app.tools.rag_retrieval import retrieve_relevant_segments
 from app.core.config import settings
 from app.core.streaming import (
     reset_stream_callback,
+    reset_stream_event_callback,
     set_stream_callback,
+    set_stream_event_callback,
 )
 from loguru import logger
 from pathlib import Path
@@ -221,17 +223,22 @@ async def generate_stream(request: AgentRequest):
         result_state = {}
         streamed_chunks = []
         callback_token = None
+        event_callback_token = None
 
         try:
             yield _sse("progress", {"message": "开始生成", "step": request.step})
 
-            queue: asyncio.Queue[str] = asyncio.Queue()
+            queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
 
             async def stream_callback(delta: str):
                 if delta:
-                    await queue.put(delta)
+                    await queue.put(("delta", {"delta": delta}))
+
+            async def stream_event_callback(event: str, data: dict):
+                await queue.put((event, data or {}))
 
             callback_token = set_stream_callback(stream_callback)
+            event_callback_token = set_stream_event_callback(stream_event_callback)
 
             if request.step == "outline":
                 state = _build_outline_state(request)
@@ -246,15 +253,23 @@ async def generate_stream(request: AgentRequest):
 
             while not task.done() or not queue.empty():
                 try:
-                    chunk = await asyncio.wait_for(queue.get(), timeout=0.2)
-                    if not streamed_chunks:
-                        first_chunk_ms = int((time.time() - start_time) * 1000)
-                        logger.info(
-                            f"SSE 首段到达: article_id={request.article_id}, "
-                            f"step={request.step}, cost={first_chunk_ms}ms"
-                        )
-                    streamed_chunks.append(chunk)
-                    yield _sse("delta", {"delta": chunk})
+                    event, data = await asyncio.wait_for(queue.get(), timeout=0.2)
+                    if event == "replace":
+                        content = data.get("content", "")
+                        streamed_chunks = [content] if content else []
+                        yield _sse("replace", {"content": content})
+                        continue
+
+                    chunk = data.get("delta", "")
+                    if chunk:
+                        if not streamed_chunks:
+                            first_chunk_ms = int((time.time() - start_time) * 1000)
+                            logger.info(
+                                f"SSE 首段到达: article_id={request.article_id}, "
+                                f"step={request.step}, cost={first_chunk_ms}ms"
+                            )
+                        streamed_chunks.append(chunk)
+                        yield _sse("delta", {"delta": chunk})
                 except asyncio.TimeoutError:
                     yield _sse("progress", {"message": "生成中", "step": request.step})
 
@@ -317,6 +332,8 @@ async def generate_stream(request: AgentRequest):
         finally:
             if callback_token is not None:
                 reset_stream_callback(callback_token)
+            if event_callback_token is not None:
+                reset_stream_event_callback(event_callback_token)
 
     return StreamingResponse(
         event_generator(),

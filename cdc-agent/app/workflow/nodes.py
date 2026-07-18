@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from app.skills.registry import SkillRegistry
 from app.models.state import AgentState
+from app.core.streaming import emit_stream_replace
 from app.skills.writing.skill_loader import get_skill_loader
 from loguru import logger
 
@@ -131,6 +132,9 @@ async def fusion_generate_node(state: AgentState) -> AgentState:
 
     skill = SkillRegistry.get_skill("fusion_generate")
 
+    if state.get("initial_draft"):
+        await emit_stream_replace("")
+
     # 使用动态 prompt
     dynamic_prompt = build_fusion_prompt(state if isinstance(state, dict) else {**state})
     logger.info(f"节点 [fusion_generate] prompt 长度: {len(dynamic_prompt)} 字符")
@@ -203,6 +207,7 @@ async def outline_validate_node(state: AgentState) -> AgentState:
 async def outline_regenerate_node(state: AgentState) -> AgentState:
     """大纲重新生成：带校验反馈重新生成大纲（最多 2 轮）"""
     skill = SkillRegistry.get_skill("outline_generate")
+    await emit_stream_replace("")
     # 把校验反馈注入 state 让 skill 知道需要改什么
     feedback = state.get("outline_feedback", "")
     retry_count = state.get("outline_retry_count", 0) + 1

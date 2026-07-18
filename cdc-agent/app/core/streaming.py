@@ -2,12 +2,17 @@
 
 import re
 from contextvars import ContextVar, Token
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 
 StreamCallback = Callable[[str], Awaitable[None]]
+StreamEventCallback = Callable[[str, Dict[str, Any]], Awaitable[None]]
 _stream_callback: ContextVar[Optional[StreamCallback]] = ContextVar(
     "cdc_stream_callback",
+    default=None,
+)
+_stream_event_callback: ContextVar[Optional[StreamEventCallback]] = ContextVar(
+    "cdc_stream_event_callback",
     default=None,
 )
 
@@ -22,6 +27,20 @@ def reset_stream_callback(token: Token) -> None:
 
 def get_stream_callback() -> Optional[StreamCallback]:
     return _stream_callback.get()
+
+
+def set_stream_event_callback(callback: StreamEventCallback) -> Token:
+    return _stream_event_callback.set(callback)
+
+
+def reset_stream_event_callback(token: Token) -> None:
+    _stream_event_callback.reset(token)
+
+
+async def emit_stream_replace(content: str = "") -> None:
+    callback = _stream_event_callback.get()
+    if callback:
+        await callback("replace", {"content": content})
 
 
 class ParagraphStreamBuffer:
