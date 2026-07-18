@@ -21,6 +21,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.*;
 
@@ -43,11 +44,25 @@ public class AgentClient {
     }
 
     public String streamOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context, Consumer<String> onChunk) {
-        return buildAndStream(articleId, req, context, "outline", null, onChunk);
+        return buildAndStream(articleId, req, context, "outline", null,
+            (event, payload) -> {
+                if ("delta".equals(event) && onChunk != null) onChunk.accept(payload);
+            });
     }
 
     public String streamDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent, Consumer<String> onChunk) {
-        return buildAndStream(articleId, req, context, "draft", previousContent, onChunk);
+        return buildAndStream(articleId, req, context, "draft", previousContent,
+            (event, payload) -> {
+                if ("delta".equals(event) && onChunk != null) onChunk.accept(payload);
+            });
+    }
+
+    public String streamOutlineEvents(Long articleId, CdcArticleRequest req, WikiTemplateContext context, BiConsumer<String, String> onEvent) {
+        return buildAndStream(articleId, req, context, "outline", null, onEvent);
+    }
+
+    public String streamDraftEvents(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent, BiConsumer<String, String> onEvent) {
+        return buildAndStream(articleId, req, context, "draft", previousContent, onEvent);
     }
 
     private Map<String, Object> buildParams(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
@@ -146,7 +161,7 @@ public class AgentClient {
     }
 
     private String buildAndStream(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
-                                  String step, String previousContent, Consumer<String> onChunk) {
+                                  String step, String previousContent, BiConsumer<String, String> onEvent) {
         Map<String, Object> params = buildParams(articleId, req, context, step, previousContent);
         String agentUrl = agentConfig.getUrl() + "/api/agent/generate/stream";
 
@@ -176,7 +191,7 @@ public class AgentClient {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.isEmpty()) {
-                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk);
+                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onEvent);
                         currentEvent = "message";
                         dataBuffer.setLength(0);
                         continue;
@@ -190,7 +205,7 @@ public class AgentClient {
                     }
                 }
                 if (dataBuffer.length() > 0) {
-                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk);
+                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onEvent);
                 }
             }
 
@@ -202,7 +217,7 @@ public class AgentClient {
         }
     }
 
-    private void handleSseMessage(String event, String data, StringBuilder content, Consumer<String> onChunk) throws Exception {
+    private void handleSseMessage(String event, String data, StringBuilder content, BiConsumer<String, String> onEvent) throws Exception {
         if (data == null || data.isBlank()) return;
         if ("error".equals(event)) {
             JsonNode root = objectMapper.readTree(data);
@@ -219,6 +234,9 @@ public class AgentClient {
                     content.setLength(0);
                     content.append(replacement);
                 }
+                if ("replace".equals(event) && onEvent != null) {
+                    onEvent.accept("replace", replacement);
+                }
             }
             return;
         }
@@ -230,7 +248,7 @@ public class AgentClient {
             String delta = deltaNode.asText();
             if (delta.isEmpty()) return;
             content.append(delta);
-            if (onChunk != null) onChunk.accept(delta);
+            if (onEvent != null) onEvent.accept("delta", delta);
         }
     }
 

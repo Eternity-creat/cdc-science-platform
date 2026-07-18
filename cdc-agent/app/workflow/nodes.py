@@ -132,13 +132,14 @@ async def fusion_generate_node(state: AgentState) -> AgentState:
 
     skill = SkillRegistry.get_skill("fusion_generate")
 
-    if state.get("initial_draft"):
-        await emit_stream_replace("")
+    is_retry_generation = bool(state.get("initial_draft"))
 
     # 使用动态 prompt
     dynamic_prompt = build_fusion_prompt(state if isinstance(state, dict) else {**state})
     logger.info(f"节点 [fusion_generate] prompt 长度: {len(dynamic_prompt)} 字符")
     state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
+    if is_retry_generation:
+        state_for_skill["_suppress_stream"] = True
 
     result = await skill.execute(state_for_skill)
     logger.info("节点 [fusion_generate] 完成")
@@ -147,6 +148,7 @@ async def fusion_generate_node(state: AgentState) -> AgentState:
 
 async def fact_check_node(state: AgentState) -> AgentState:
     """9. 事实核查 + 引用验证"""
+    await emit_stream_replace("")
     skill = SkillRegistry.get_skill("fact_check")
     result = await skill.execute(state)
     logger.info(f"节点 [9/12] fact_check 完成, is_fact_ok={result.get('is_fact_ok')}")
