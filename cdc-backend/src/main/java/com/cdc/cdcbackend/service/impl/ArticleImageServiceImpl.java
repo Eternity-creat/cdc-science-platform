@@ -4,9 +4,15 @@ import com.cdc.cdcbackend.mapper.CdcArticleImageMapper;
 import com.cdc.cdcbackend.service.ArticleImageService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 public class ArticleImageServiceImpl implements ArticleImageService {
     @Resource
@@ -39,6 +45,22 @@ public class ArticleImageServiceImpl implements ArticleImageService {
 
     @Override
     public int delete(Long id) {
+        CdcArticleImage image = imageMapper.getById(id);
+        if (image != null && image.getFilePath() != null && !image.getFilePath().isBlank()) {
+            try {
+                // filePath 格式如 /uploads/images/xxx.jpg，去掉前导 / 得到相对路径
+                String relative = image.getFilePath().startsWith("/")
+                    ? image.getFilePath().substring(1)
+                    : image.getFilePath();
+                Path filePath = Paths.get(relative);
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    log.info("已删除配图文件: {}", filePath);
+                }
+            } catch (Exception e) {
+                log.warn("删除配图文件失败(id={}): {}", id, e.getMessage());
+            }
+        }
         return imageMapper.delete(id);
     }
 
