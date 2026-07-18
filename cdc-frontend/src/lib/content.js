@@ -187,6 +187,34 @@ export function parseImageAlt(rawAlt) {
   return result;
 }
 
+const CHINESE_SECTION_NUMBERS = {
+  一: 1, 二: 2, 三: 3, 四: 4, 五: 5,
+  六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+};
+
+export function parseSectionNoFromTitle(title) {
+  const value = String(title || '').trim().replace(/^#{1,6}\s*/, '');
+  const arabicMatch = value.match(/^(\d{1,2})[、.．\s]/);
+  if (arabicMatch) return Number.parseInt(arabicMatch[1], 10);
+
+  const chineseMatch = value.match(/^([一二三四五六七八九十]{1,3})[、.．\s]/);
+  if (!chineseMatch) return null;
+
+  const text = chineseMatch[1];
+  if (CHINESE_SECTION_NUMBERS[text]) return CHINESE_SECTION_NUMBERS[text];
+  if (text.startsWith('十')) {
+    return 10 + (CHINESE_SECTION_NUMBERS[text.slice(1)] || 0);
+  }
+  if (text.endsWith('十')) {
+    return (CHINESE_SECTION_NUMBERS[text.slice(0, -1)] || 1) * 10;
+  }
+  if (text.includes('十')) {
+    const [tens, ones] = text.split('十');
+    return (CHINESE_SECTION_NUMBERS[tens] || 1) * 10 + (CHINESE_SECTION_NUMBERS[ones] || 0);
+  }
+  return null;
+}
+
 export function extractImagePromptMeta(prompt) {
   const value = String(prompt || '').replace(/\r\n/g, '\n').trim();
   if (!value) {
@@ -217,6 +245,7 @@ export function insertMarkdownAtSuggestedSection(content, markdown, image) {
   const meta = extractImagePromptMeta(image?.generationPrompt || image?.prompt || '');
   const targetTitle = meta.sectionTitle || '';
 
+  // 策略1：按标题关键词匹配 heading
   if (targetTitle) {
     const escaped = targetTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const headingMatch = new RegExp(`(^|\\n)(#{1,6}\\s+.*${escaped}.*)(\\n|$)`).exec(source);
@@ -231,10 +260,50 @@ export function insertMarkdownAtSuggestedSection(content, markdown, image) {
     }
   }
 
+  // 策略2：按 position/sectionNo 定位第 N 个 heading
+  const sectionNo = parseSectionNoFromTitle(targetTitle)
+    ?? (image?.position == null ? null : Number(image.position) + 1);
+  if (sectionNo != null) {
+    const headingPattern = /(^|\n)(#{1,6}\s+.+)(\n|$)/g;
+    let match;
+    let count = 0;
+    while ((match = headingPattern.exec(source)) !== null) {
+      count++;
+      if (count === sectionNo) {
+        const lineEnd = match.index + match[0].length;
+        const insertAt = match[0].endsWith('\n') ? lineEnd : lineEnd + 1;
+        return {
+          content: `${source.slice(0, insertAt)}${insert}${source.slice(insertAt)}`,
+          matched: true,
+          targetTitle: `第 ${sectionNo} 部分`,
+        };
+      }
+    }
+  }
+
+  // 策略3：按 sectionTitle 关键词在正文中搜索（不限于 heading）
+  if (targetTitle && targetTitle.length >= 2) {
+    const escaped = targetTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const textMatch = new RegExp(`(^|\\n)(.*${escaped}.*)`).exec(source);
+    if (textMatch) {
+      // 找到段落文本后，定位到该段落结束位置（下一个空行或 heading）
+      const afterMatch = textMatch.index + textMatch[0].length;
+      const rest = source.slice(afterMatch);
+      const sectionEnd = rest.search(/\n\n|\n#{1,6}\s/);
+      const insertAt = sectionEnd >= 0 ? afterMatch + sectionEnd : afterMatch;
+      return {
+        content: `${source.slice(0, insertAt)}${insert}${source.slice(insertAt)}`,
+        matched: true,
+        targetTitle,
+      };
+    }
+  }
+
+  // 兜底：附到文章末尾
   return {
-    content: source,
+    content: source + insert,
     matched: false,
-    targetTitle,
+    targetTitle: targetTitle || '文末',
   };
 }
 

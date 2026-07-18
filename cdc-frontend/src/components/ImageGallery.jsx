@@ -11,43 +11,7 @@ import { Badge } from './ui/badge.jsx';
 import { ScrollArea } from './ui/scroll-area.jsx';
 import { Input } from './ui/input.jsx';
 import * as galleryApi from '../api/gallery.js';
-import { compressImageFile, extractImagePromptMeta, normalizeImageSrc } from '../lib/content.js';
-
-const CHINESE_SECTION_NUMBERS = {
-  一: 1,
-  二: 2,
-  三: 3,
-  四: 4,
-  五: 5,
-  六: 6,
-  七: 7,
-  八: 8,
-  九: 9,
-  十: 10,
-};
-
-function parseSectionNoFromTitle(title) {
-  const value = String(title || '').trim().replace(/^#{1,6}\s*/, '');
-  const arabicMatch = value.match(/^(\d{1,2})[、.．\s]/);
-  if (arabicMatch) return Number.parseInt(arabicMatch[1], 10);
-
-  const chineseMatch = value.match(/^([一二三四五六七八九十]{1,3})[、.．\s]/);
-  if (!chineseMatch) return null;
-
-  const text = chineseMatch[1];
-  if (CHINESE_SECTION_NUMBERS[text]) return CHINESE_SECTION_NUMBERS[text];
-  if (text.startsWith('十')) {
-    return 10 + (CHINESE_SECTION_NUMBERS[text.slice(1)] || 0);
-  }
-  if (text.endsWith('十')) {
-    return (CHINESE_SECTION_NUMBERS[text.slice(0, -1)] || 1) * 10;
-  }
-  if (text.includes('十')) {
-    const [tens, ones] = text.split('十');
-    return (CHINESE_SECTION_NUMBERS[tens] || 1) * 10 + (CHINESE_SECTION_NUMBERS[ones] || 0);
-  }
-  return null;
-}
+import { compressImageFile, extractImagePromptMeta, normalizeImageSrc, parseSectionNoFromTitle } from '../lib/content.js';
 
 /**
  * ImageGallery - 文章配图画廊（重新设计）
