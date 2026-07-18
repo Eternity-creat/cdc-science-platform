@@ -42,12 +42,14 @@ public class AgentClient {
         return buildAndCall(articleId, req, context, "draft", previousContent);
     }
 
-    public Map<String, Object> streamOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context, Consumer<String> onChunk) {
-        return buildAndStream(articleId, req, context, "outline", null, onChunk);
+    public Map<String, Object> streamOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
+                                               Consumer<String> onChunk, Consumer<String> onReplace) {
+        return buildAndStream(articleId, req, context, "outline", null, onChunk, onReplace);
     }
 
-    public Map<String, Object> streamDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent, Consumer<String> onChunk) {
-        return buildAndStream(articleId, req, context, "draft", previousContent, onChunk);
+    public Map<String, Object> streamDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
+                                             String previousContent, Consumer<String> onChunk, Consumer<String> onReplace) {
+        return buildAndStream(articleId, req, context, "draft", previousContent, onChunk, onReplace);
     }
 
     private Map<String, Object> buildParams(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
@@ -146,7 +148,7 @@ public class AgentClient {
     }
 
     private Map<String, Object> buildAndStream(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
-                                  String step, String previousContent, Consumer<String> onChunk) {
+                                  String step, String previousContent, Consumer<String> onChunk, Consumer<String> onReplace) {
         Map<String, Object> params = buildParams(articleId, req, context, step, previousContent);
         String agentUrl = agentConfig.getUrl() + "/api/agent/generate/stream";
 
@@ -177,7 +179,7 @@ public class AgentClient {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.isEmpty()) {
-                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, generationMetaHolder);
+                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, onReplace, generationMetaHolder);
                         currentEvent = "message";
                         dataBuffer.setLength(0);
                         continue;
@@ -191,7 +193,7 @@ public class AgentClient {
                     }
                 }
                 if (dataBuffer.length() > 0) {
-                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, generationMetaHolder);
+                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, onReplace, generationMetaHolder);
                 }
             }
 
@@ -207,7 +209,8 @@ public class AgentClient {
     }
 
     private void handleSseMessage(String event, String data, StringBuilder content,
-                                   Consumer<String> onChunk, String[] generationMetaHolder) throws Exception {
+                                   Consumer<String> onChunk, Consumer<String> onReplace,
+                                   String[] generationMetaHolder) throws Exception {
         if (data == null || data.isBlank()) return;
         if ("error".equals(event)) {
             JsonNode root = objectMapper.readTree(data);
@@ -216,7 +219,21 @@ public class AgentClient {
         }
         JsonNode root = objectMapper.readTree(data);
 
-        if ("replace".equals(event) || "done".equals(event)) {
+        if ("replace".equals(event)) {
+            JsonNode contentNode = root.get("content");
+            if (contentNode != null && contentNode.isTextual()) {
+                String replacement = contentNode.asText();
+                content.setLength(0);
+                content.append(replacement);
+                // 转发 replace 事件到前端，让前端清空累积内容并替换
+                if (onReplace != null) {
+                    onReplace.accept(replacement);
+                }
+            }
+            return;
+        }
+
+        if ("done".equals(event)) {
             JsonNode contentNode = root.get("content");
             if (contentNode != null && contentNode.isTextual()) {
                 String replacement = contentNode.asText();
@@ -226,11 +243,9 @@ public class AgentClient {
                 }
             }
             // 从 done 事件中提取 generation_meta
-            if ("done".equals(event)) {
-                JsonNode metaNode = root.get("generation_meta");
-                if (metaNode != null && metaNode.isObject()) {
-                    generationMetaHolder[0] = objectMapper.writeValueAsString(metaNode);
-                }
+            JsonNode metaNode = root.get("generation_meta");
+            if (metaNode != null && metaNode.isObject()) {
+                generationMetaHolder[0] = objectMapper.writeValueAsString(metaNode);
             }
             return;
         }

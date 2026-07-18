@@ -441,8 +441,12 @@ public class ArticleServiceImpl implements ArticleService {
 
                 String previousContent = "draft".equals(step) ? article.getOutline() : null;
                 Map<String, Object> streamResult = "outline".equals(step)
-                    ? agentClient.streamOutline(articleId, req, context, chunk -> sendDelta(emitter, chunk))
-                    : agentClient.streamDraft(articleId, req, context, previousContent, chunk -> sendDelta(emitter, chunk));
+                    ? agentClient.streamOutline(articleId, req, context,
+                        chunk -> sendDelta(emitter, chunk),
+                        replacement -> sendReplace(emitter, replacement))
+                    : agentClient.streamDraft(articleId, req, context, previousContent,
+                        chunk -> sendDelta(emitter, chunk),
+                        replacement -> sendReplace(emitter, replacement));
                 String content = (String) streamResult.get("content");
                 String genMeta = (String) streamResult.get("generationMeta");
 
@@ -518,6 +522,10 @@ public class ArticleServiceImpl implements ArticleService {
 
     private void sendDelta(SseEmitter emitter, String delta) {
         sendSse(emitter, "delta", Map.of("delta", delta));
+    }
+
+    private void sendReplace(SseEmitter emitter, String content) {
+        sendSse(emitter, "replace", Map.of("content", content));
     }
 
     private void sendSse(SseEmitter emitter, String eventName, Object data) {
