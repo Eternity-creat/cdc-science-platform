@@ -282,14 +282,10 @@ async def generate_stream(request: AgentRequest):
 
             full_text = "".join(streamed_chunks)
             if not full_text:
-                if content:
-                    full_text = content
-                    yield _sse("replace", {"content": full_text})
-                else:
-                    raise RuntimeError(
-                        "模型生成已结束，但没有收到任何实时 SSE 文本增量；"
-                        "已拒绝使用生成完成后的伪流式输出"
-                    )
+                raise RuntimeError(
+                    "模型生成已结束，但没有收到任何实时 SSE 文本增量；"
+                    "已拒绝使用生成完成后的伪流式输出"
+                )
             elif full_text != content and content.startswith(full_text):
                 tail = content[len(full_text):]
                 if tail:

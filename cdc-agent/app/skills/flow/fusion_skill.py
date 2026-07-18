@@ -81,7 +81,7 @@ class FusionGenerateSkill(BaseSkill):
             logger.debug("FusionGenerateSkill: 使用固定模板（回退模式）")
 
         messages = [{"role": "user", "content": prompt}]
-        stream_callback = None if state.get("_suppress_stream") else (get_stream_callback() or state.get("_stream_callback"))
+        stream_callback = get_stream_callback() or state.get("_stream_callback")
         if stream_callback:
             chunks = []
             paragraph_buffer = ParagraphStreamBuffer()

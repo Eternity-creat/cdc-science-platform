@@ -417,8 +417,8 @@ public class ArticleServiceImpl implements ArticleService {
 
                 String previousContent = "draft".equals(step) ? article.getOutline() : null;
                 String content = "outline".equals(step)
-                    ? agentClient.streamOutlineEvents(articleId, req, context, (event, payload) -> sendStreamEvent(emitter, event, payload))
-                    : agentClient.streamDraftEvents(articleId, req, context, previousContent, (event, payload) -> sendStreamEvent(emitter, event, payload));
+                    ? agentClient.streamOutline(articleId, req, context, chunk -> sendDelta(emitter, chunk))
+                    : agentClient.streamDraft(articleId, req, context, previousContent, chunk -> sendDelta(emitter, chunk));
 
                 int costTime = (int) (System.currentTimeMillis() - start);
                 persistGeneratedContent(articleId, step, content);
@@ -485,18 +485,6 @@ public class ArticleServiceImpl implements ArticleService {
 
     private void sendDelta(SseEmitter emitter, String delta) {
         sendSse(emitter, "delta", Map.of("delta", delta));
-    }
-
-    private void sendReplace(SseEmitter emitter, String content) {
-        sendSse(emitter, "replace", Map.of("content", content == null ? "" : content));
-    }
-
-    private void sendStreamEvent(SseEmitter emitter, String event, String payload) {
-        if ("replace".equals(event)) {
-            sendReplace(emitter, payload);
-        } else if ("delta".equals(event)) {
-            sendDelta(emitter, payload);
-        }
     }
 
     private void sendSse(SseEmitter emitter, String eventName, Object data) {
