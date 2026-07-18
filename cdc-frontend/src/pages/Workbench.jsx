@@ -878,6 +878,14 @@ export default function Workbench() {
         return;
       }
     }
+
+    if (options.insertAt === 'prepend') {
+      const newContent = markdown + (editDraft ? '\n\n' + editDraft : '');
+      setEditDraft(newContent);
+      scheduleAutoSave('initial_draft', newContent);
+      toast.success('已插入到文章开头');
+      return;
+    }
     const textarea = draftTextareaRef.current;
     if (textarea) {
       const start = textarea.selectionStart ?? editDraft.length;
@@ -1347,7 +1355,7 @@ export default function Workbench() {
           modifications={modifications}
           context={context}
           onRevert={handleRevertNow}
-          readonly={article?.status >= 5}
+          readonly={article?.status >= 4}
           revertingId={revertingId}
           articleId={id}
           draftContent={draftText || finalText}

@@ -23,6 +23,21 @@ import { compressImageFile, extractImagePromptMeta, normalizeImageSrc, parseSect
  *   draftContent - 当前初稿内容（用于 AI 分析段落）
  *   readonly     - 是否为只读模式（终稿阶段）
  */
+function parseSectionsFromDraft(content) {
+  if (!content) return [];
+  const sections = [];
+  const lines = content.split('\n');
+  let idx = 0;
+  for (const line of lines) {
+    const match = line.match(/^#{1,6}\s+(.+)/);
+    if (match) {
+      sections.push({ index: idx, title: match[1].trim() });
+      idx++;
+    }
+  }
+  return sections;
+}
+
 function getImageDisplayInfo(img) {
   const promptMeta = extractImagePromptMeta(img?.generationPrompt || img?.prompt || '');
   const rawCaption = String(img?.caption || '').trim();
@@ -57,6 +72,8 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
   const [imageStatus, setImageStatus] = useState({});
   const [error, setError] = useState(null);
   const [pendingInsert, setPendingInsert] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
+  const [selectedSection, setSelectedSection] = useState(0);
   const [deletingId, setDeletingId] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -202,7 +219,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
         throw new Error('图片已上传但无法访问，请检查 /uploads 静态资源服务');
       }
 
-      await galleryApi.saveImage({
+      const savedImage = {
         articleId: parseInt(articleId, 10),
         imageKey: `upload_${Date.now()}`,
         filePath: uploaded.filePath,
@@ -214,7 +231,18 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
         height: uploaded.height || null,
         fileSize: uploaded.fileSize || compressed.size,
         status: 1,
-      });
+      };
+      await galleryApi.saveImage(savedImage);
+
+      // 解析段落并弹出插入确认对话框
+      const sections = parseSectionsFromDraft(draftContent);
+      const uploadInfo = {
+        ...savedImage,
+        id: `upload_${Date.now()}`,
+        sections,
+      };
+      setPendingUpload(uploadInfo);
+      setSelectedSection(Math.min(sections.length, 1)); // 默认选中第一个段落（0 = "文章开头"）
       await loadImages();
     } catch (e) {
       console.error('上传图片失败:', e);
@@ -266,6 +294,44 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
     }
     setPendingInsert(null);
   }, [pendingInsert, onInsertImage]);
+
+  /* Confirm upload insert from section selection dialog */
+  const confirmUploadInsert = useCallback(() => {
+    if (!pendingUpload) return;
+    const sections = pendingUpload.sections || [];
+    const totalSections = sections.length;
+
+    let sectionTitle = '';
+    let position = 0;
+    let insertAt = 'section';
+
+    if (selectedSection === 0) {
+      // 文章开头 — 直接在最前方插入
+      sectionTitle = '';
+      position = 0;
+      insertAt = 'prepend';
+    } else if (selectedSection > totalSections) {
+      // 文章末尾 — 无匹配则 fallback 到末尾
+      sectionTitle = '';
+      position = totalSections;
+    } else {
+      // 具体段落
+      const chosen = sections[selectedSection - 1];
+      sectionTitle = chosen?.title || '';
+      position = chosen?.index ?? selectedSection - 1;
+    }
+
+    const imgForInsert = {
+      ...pendingUpload,
+      position,
+      generationPrompt: sectionTitle ? `段落标题: ${sectionTitle}` : '',
+    };
+
+    if (onInsertImage) {
+      onInsertImage(imgForInsert, { align: 'center', width: 720, insertAt });
+    }
+    setPendingUpload(null);
+  }, [pendingUpload, selectedSection, onInsertImage]);
 
   /* ===== Render ===== */
   const hasImages = images.length > 0;
@@ -606,6 +672,69 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                   size="sm"
                   className="flex-1 text-[12px]"
                   onClick={confirmInsert}
+                >
+                  确认插入（居中）
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Upload section selection dialog */}
+      {pendingUpload && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-foreground/50 backdrop-blur-sm"
+            onClick={() => setPendingUpload(null)}
+          />
+          <div className="relative z-10 w-[320px] rounded-xl bg-card border border-border shadow-2xl overflow-hidden">
+            {/* Image preview */}
+            {pendingUpload.filePath && (
+              <div className="w-full bg-muted/30 max-h-[200px] overflow-hidden">
+                <img
+                  src={pendingUpload.filePath}
+                  alt={pendingUpload.caption || '上传图片'}
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+            )}
+            {/* Section selection */}
+            <div className="p-4">
+              <p className="text-[13px] font-medium text-foreground">
+                图片已上传
+              </p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                请选择要插入到的段落位置
+              </p>
+              <select
+                className="w-full mt-3 rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(Number(e.target.value))}
+              >
+                <option value={0}>文章开头（标题前方）</option>
+                {(pendingUpload.sections || []).map((s) => (
+                  <option key={s.index} value={s.index + 1}>
+                    {s.title}
+                  </option>
+                ))}
+                <option value={(pendingUpload.sections || []).length + 1}>文章末尾</option>
+              </select>
+              {/* Actions */}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-[12px]"
+                  onClick={() => setPendingUpload(null)}
+                >
+                  稍后手动插入
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 text-[12px]"
+                  onClick={confirmUploadInsert}
                 >
                   确认插入（居中）
                 </Button>
