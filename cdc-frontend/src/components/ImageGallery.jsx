@@ -461,42 +461,16 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                         <span className="text-[10px] mt-1">{placeholderText}</span>
                       </div>
 
-                      {/* Hover overlay with actions */}
-                      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/30 transition-colors duration-200 opacity-0 group-hover:opacity-100">
+                      {/* Hover overlay - edit button only */}
+                      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/20 transition-colors duration-200 opacity-0 group-hover:opacity-100">
                         {!readonly && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1.5">
-                            <button
-                              className="flex h-7 w-7 items-center justify-center rounded-md bg-background/80 hover:bg-background text-foreground transition-colors shadow-sm"
-                              onClick={(e) => { e.stopPropagation(); startEditCaption(img); }}
-                              title="编辑说明"
-                            >
-                              <Edit3 size={12} />
-                            </button>
-                            {isDeleting ? (
-                              <div className="flex items-center gap-1 rounded-md bg-destructive shadow-sm overflow-hidden">
-                                <button
-                                  className="px-2 py-1 text-[10px] font-medium text-white hover:bg-destructive/80 transition-colors"
-                                  onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
-                                >
-                                  确认
-                                </button>
-                                <button
-                                  className="px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10 transition-colors border-l border-white/20"
-                                  onClick={(e) => { e.stopPropagation(); setDeletingId(null); }}
-                                >
-                                  取消
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/80 hover:bg-destructive text-white transition-colors shadow-sm"
-                                onClick={(e) => { e.stopPropagation(); setDeletingId(img.id); }}
-                                title="删除"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-md bg-background/80 hover:bg-background text-foreground transition-colors shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); startEditCaption(img); }}
+                            title="编辑说明"
+                          >
+                            <Edit3 size={12} />
+                          </button>
                         )}
                       </div>
 
@@ -513,6 +487,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                     {/* Bottom bar */}
                     <div className="px-3 pb-2.5 pt-2">
                       {editingId === img.id ? (
+                        /* Caption editing mode */
                         <div className="flex items-center gap-1.5">
                           <Input
                             value={editCaption}
@@ -537,7 +512,27 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             <X size={14} />
                           </button>
                         </div>
+                      ) : isDeleting ? (
+                        /* Delete confirmation mode */
+                        <div className="flex items-center justify-between gap-2 py-1">
+                          <span className="text-[12px] text-destructive font-medium">确定删除这张配图？</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              className="px-3 py-1 rounded-md text-[11px] font-medium bg-destructive text-white hover:bg-destructive/90 transition-colors"
+                              onClick={() => handleDelete(img.id)}
+                            >
+                              删除
+                            </button>
+                            <button
+                              className="px-3 py-1 rounded-md text-[11px] font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                              onClick={() => setDeletingId(null)}
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </div>
                       ) : !readonly && onInsertImage ? (
+                        /* Normal mode: insert buttons + delete */
                         <div className="flex items-center gap-2">
                           <button
                             className={cn(
@@ -566,6 +561,13 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                           >
                             <AlignLeft size={13} />
                             左对齐
+                          </button>
+                          <button
+                            className="shrink-0 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground/50 hover:text-destructive hover:bg-destructive/8 transition-colors"
+                            onClick={() => setDeletingId(img.id)}
+                            title="删除配图"
+                          >
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       ) : null}
