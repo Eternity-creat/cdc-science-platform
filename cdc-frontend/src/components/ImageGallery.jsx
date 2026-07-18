@@ -81,7 +81,7 @@ function getImageDisplayInfo(img) {
   };
 }
 
-export default function ImageGallery({ articleId, draftContent, readonly = false, onInsertImage }) {
+export default function ImageGallery({ articleId, draftContent, readonly = false, onInsertImage, onRemoveImage }) {
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -93,6 +93,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
   const [imageStatus, setImageStatus] = useState({});
   const [error, setError] = useState(null);
   const [pendingInsert, setPendingInsert] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const fileInputRef = useRef(null);
 
   /* Load images on mount */
@@ -261,9 +262,15 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
 
   /* Delete image */
   const handleDelete = async (imageId) => {
+    const img = images.find(i => i.id === imageId);
     try {
       await galleryApi.deleteImage(imageId);
-      setImages(prev => prev.filter(img => img.id !== imageId));
+      setImages(prev => prev.filter(i => i.id !== imageId));
+      setDeletingId(null);
+      // 同步清除草稿中已插入的图片
+      if (img && onRemoveImage) {
+        onRemoveImage(img);
+      }
     } catch (e) {
       console.error('删除图片失败:', e);
     }
@@ -410,12 +417,13 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                 </span>
               </div>
 
-              {/* 网格 */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* 列表：单列 */}
+              <div className="flex flex-col gap-3">
                 {images.map((img, idx) => {
                   const status = imageStatus[img.id] || (img.filePath ? 'checking' : 'error');
                   const canUseImage = Boolean(img.filePath) && status !== 'error';
                   const info = getImageDisplayInfo(img);
+                  const isDeleting = deletingId === img.id;
                   const placeholderText = !img.filePath
                     ? '无图片路径'
                     : status === 'checking'
@@ -428,16 +436,16 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                     className="group bg-card border border-border overflow-hidden enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300"
                     style={{ '--enter-delay': `${idx * 50}ms` }}
                   >
-                    {/* Image thumbnail - click to enlarge */}
+                    {/* Image - click to enlarge */}
                     <div
-                      className="relative aspect-[4/3] bg-muted/50 overflow-hidden cursor-pointer"
+                      className="relative w-full bg-muted/50 overflow-hidden cursor-pointer"
                       onClick={() => canUseImage && setPreviewImage(img)}
                     >
                       {canUseImage ? (
                         <img
                           src={img.filePath}
                           alt={img.caption || '配图'}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="w-full h-auto block transition-transform duration-300 group-hover:scale-[1.02]"
                           onLoad={() => setImageStatus((prev) => ({ ...prev, [img.id]: 'ready' }))}
                           onError={() => setImageStatus((prev) => ({ ...prev, [img.id]: 'error' }))}
                         />
@@ -445,7 +453,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                       {/* Fallback placeholder */}
                       <div
                         className={cn(
-                          "absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/40",
+                          "flex flex-col items-center justify-center text-muted-foreground/40 py-12",
                           canUseImage ? 'hidden' : 'flex'
                         )}
                       >
@@ -453,46 +461,63 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                         <span className="text-[10px] mt-1">{placeholderText}</span>
                       </div>
 
-                      {/* Overlay on hover */}
-                      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/40 transition-colors duration-200 flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
+                      {/* Hover overlay with actions */}
+                      <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/30 transition-colors duration-200 opacity-0 group-hover:opacity-100">
                         {!readonly && (
-                          <>
+                          <div className="absolute top-2 right-2 flex items-center gap-1.5">
                             <button
-                              className="flex h-7 w-7 items-center justify-center rounded-full bg-background/80 hover:bg-background text-foreground transition-colors"
+                              className="flex h-7 w-7 items-center justify-center rounded-md bg-background/80 hover:bg-background text-foreground transition-colors shadow-sm"
                               onClick={(e) => { e.stopPropagation(); startEditCaption(img); }}
                               title="编辑说明"
                             >
-                              <Edit3 size={13} />
+                              <Edit3 size={12} />
                             </button>
-                            <button
-                              className="flex h-7 w-7 items-center justify-center rounded-full bg-destructive/80 hover:bg-destructive text-white transition-colors"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
-                              title="删除"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </>
+                            {isDeleting ? (
+                              <div className="flex items-center gap-1 rounded-md bg-destructive shadow-sm overflow-hidden">
+                                <button
+                                  className="px-2 py-1 text-[10px] font-medium text-white hover:bg-destructive/80 transition-colors"
+                                  onClick={(e) => { e.stopPropagation(); handleDelete(img.id); }}
+                                >
+                                  确认
+                                </button>
+                                <button
+                                  className="px-2 py-1 text-[10px] font-medium text-white/80 hover:bg-white/10 transition-colors border-l border-white/20"
+                                  onClick={(e) => { e.stopPropagation(); setDeletingId(null); }}
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="flex h-7 w-7 items-center justify-center rounded-md bg-destructive/80 hover:bg-destructive text-white transition-colors shadow-sm"
+                                onClick={(e) => { e.stopPropagation(); setDeletingId(img.id); }}
+                                title="删除"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      {/* Position badge */}
+                      {/* Section badge */}
                       {info.sectionNo != null && (
-                        <div className="absolute top-1.5 left-1.5">
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 bg-background/80 backdrop-blur-sm">
+                        <div className="absolute bottom-2 left-2">
+                          <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-background/85 backdrop-blur-sm shadow-sm">
                             {info.sectionLabel}
                           </Badge>
                         </div>
                       )}
                     </div>
 
-                    {/* Bottom bar: insert buttons or caption edit */}
-                    <div className="px-2 pb-2 pt-1">
+                    {/* Bottom bar */}
+                    <div className="px-3 pb-2.5 pt-2">
                       {editingId === img.id ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <Input
                             value={editCaption}
                             onChange={(e) => setEditCaption(e.target.value)}
-                            className="h-6 text-[11px] px-1.5 flex-1"
+                            className="h-7 text-[12px] px-2 flex-1"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') saveCaption(img.id);
@@ -500,17 +525,23 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             }}
                           />
                           <button
-                            className="shrink-0 text-primary"
+                            className="shrink-0 text-primary hover:text-primary/80 transition-colors"
                             onClick={() => saveCaption(img.id)}
                           >
-                            <Check size={14} />
+                            <Check size={16} />
+                          </button>
+                          <button
+                            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setEditingId(null)}
+                          >
+                            <X size={14} />
                           </button>
                         </div>
                       ) : !readonly && onInsertImage ? (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <button
                             className={cn(
-                              "flex flex-1 items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              "flex flex-1 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium py-2 transition-colors",
                               canUseImage
                                 ? "bg-primary/8 hover:bg-primary/15 text-primary"
                                 : "bg-muted text-muted-foreground/50 cursor-not-allowed"
@@ -519,12 +550,12 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             disabled={!canUseImage}
                             title="居中插入对应段落"
                           >
-                            <AlignCenter size={12} />
-                            居中
+                            <AlignCenter size={13} />
+                            居中插入
                           </button>
                           <button
                             className={cn(
-                              "flex flex-1 items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              "flex flex-1 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium py-2 transition-colors",
                               canUseImage
                                 ? "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
                                 : "bg-muted text-muted-foreground/50 cursor-not-allowed"
@@ -533,7 +564,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             disabled={!canUseImage}
                             title="左对齐插入对应段落"
                           >
-                            <AlignLeft size={12} />
+                            <AlignLeft size={13} />
                             左对齐
                           </button>
                         </div>

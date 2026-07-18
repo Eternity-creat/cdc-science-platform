@@ -274,6 +274,21 @@ export function replaceImageInMarkdown(content, filePath, newMarkdown) {
   };
 }
 
+/**
+ * 从草稿中移除指定图片（按 filePath 匹配），清理多余空行。
+ */
+export function removeImageFromMarkdown(content, filePath) {
+  const src = normalizeImageSrc(filePath);
+  if (!src) return { content, removed: false };
+
+  const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\n*!\\[[^\\]]*\\]\\(${escapedSrc}\\)\\n*`, 'g');
+  if (!pattern.test(content)) return { content, removed: false };
+
+  const cleaned = content.replace(pattern, '\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { content: cleaned, removed: true };
+}
+
 export function buildImageMarkdown(image, options = {}) {
   const src = normalizeImageSrc(image?.filePath || image?.url || '');
   if (!src) return '';

@@ -19,7 +19,7 @@ import Pipeline from '../components/Pipeline.jsx';
 import MarkdownRenderer from '../components/MarkdownRenderer.jsx';
 import ImageGallery from '../components/ImageGallery.jsx';
 import OutlineNavigator from '../components/OutlineNavigator.jsx';
-import { buildImageMarkdown, insertMarkdownAtSuggestedSection, replaceImageInMarkdown } from '../lib/content.js';
+import { buildImageMarkdown, insertMarkdownAtSuggestedSection, replaceImageInMarkdown, removeImageFromMarkdown } from '../lib/content.js';
 import * as articleApi from '../api/article.js';
 
 /* ===== Status Map (aligned with backend 1-5) ===== */
@@ -893,6 +893,17 @@ export default function Workbench() {
     }
   }, [editDraft, scheduleAutoSave]);
 
+  /* ===== Remove image from draft ===== */
+  const removeImageFromDraft = useCallback((img) => {
+    if (!img?.filePath) return;
+    const { content: cleaned, removed } = removeImageFromMarkdown(editDraft, img.filePath);
+    if (removed) {
+      setEditDraft(cleaned);
+      scheduleAutoSave('initial_draft', cleaned);
+      toast.success('已从文章中移除配图');
+    }
+  }, [editDraft, scheduleAutoSave]);
+
   /* ===== Export Markdown ===== */
   const handleExportMarkdown = useCallback(() => {
     const content = finalText || draftText;
@@ -1213,6 +1224,7 @@ export default function Workbench() {
             draftContent={editDraft || draftText}
             segments={context?.segments || []}
             onInsertImage={insertImageToDraft}
+            onRemoveImage={removeImageFromDraft}
           />
         </div>
       </div>
@@ -1221,7 +1233,6 @@ export default function Workbench() {
 
   /* =================================================================== */
   /* ===== PHASE: FINAL (status 4+) ===== */
-  /* =================================================================== */
   return (
     <div className="flex h-screen flex-col">
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog(null)} />
@@ -1605,7 +1616,7 @@ function FullContentBlock({ title, parts, side }) {
   );
 }
 
-function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, context, onRevert, readonly, revertingId, articleId, draftContent, segments, onInsertImage }) {
+function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, context, onRevert, readonly, revertingId, articleId, draftContent, segments, onInsertImage, onRemoveImage }) {
   const [selectedMod, setSelectedMod] = useState(null);
 
   return (
@@ -1774,6 +1785,7 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
             draftContent={draftContent}
             readonly={readonly}
             onInsertImage={onInsertImage}
+            onRemoveImage={onRemoveImage}
           />
         </TabsContent>
       </Tabs>
