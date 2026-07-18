@@ -255,6 +255,25 @@ function looksLikeImagePrompt(text) {
   return value.length > 40 && signalCount >= 2;
 }
 
+/**
+ * 在草稿中查找已有图片（按 filePath 匹配）并替换为新的 markdown。
+ * 用于调整对齐方式等场景，避免重复插入同一张图片。
+ */
+export function replaceImageInMarkdown(content, filePath, newMarkdown) {
+  const src = normalizeImageSrc(filePath);
+  if (!src) return { content, replaced: false };
+
+  const escapedSrc = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`!\\[[^\\]]*\\]\\(${escapedSrc}\\)`);
+  if (!pattern.test(content)) return { content, replaced: false };
+
+  const trimmed = newMarkdown.trim();
+  return {
+    content: content.replace(pattern, trimmed),
+    replaced: true,
+  };
+}
+
 export function buildImageMarkdown(image, options = {}) {
   const src = normalizeImageSrc(image?.filePath || image?.url || '');
   if (!src) return '';

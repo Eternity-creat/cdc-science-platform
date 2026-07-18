@@ -19,7 +19,7 @@ import Pipeline from '../components/Pipeline.jsx';
 import MarkdownRenderer from '../components/MarkdownRenderer.jsx';
 import ImageGallery from '../components/ImageGallery.jsx';
 import OutlineNavigator from '../components/OutlineNavigator.jsx';
-import { buildImageMarkdown, insertMarkdownAtSuggestedSection } from '../lib/content.js';
+import { buildImageMarkdown, insertMarkdownAtSuggestedSection, replaceImageInMarkdown } from '../lib/content.js';
 import * as articleApi from '../api/article.js';
 
 /* ===== Status Map (aligned with backend 1-5) ===== */
@@ -859,6 +859,16 @@ export default function Workbench() {
   const insertImageToDraft = useCallback((img, options = {}) => {
     if (!img?.filePath) return;
     const markdown = buildImageMarkdown(img, options);
+
+    // 检查图片是否已在草稿中 → 替换（调整对齐）而非重复插入
+    const { content: replacedContent, replaced } = replaceImageInMarkdown(editDraft, img.filePath, markdown);
+    if (replaced) {
+      setEditDraft(replacedContent);
+      scheduleAutoSave('initial_draft', replacedContent);
+      toast.success('已调整图片对齐');
+      return;
+    }
+
     if (options.insertAt === 'section') {
       const inserted = insertMarkdownAtSuggestedSection(editDraft, markdown, img);
       if (inserted.matched) {

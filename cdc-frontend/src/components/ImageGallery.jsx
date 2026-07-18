@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import {
   Image as ImageIcon, Loader2, Trash2, Edit3, X,
   Sparkles, AlertTriangle, ImagePlus, Check, Upload, AlignCenter, AlignLeft,
-  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from './ui/button.jsx';
@@ -91,9 +90,9 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
   const [previewImage, setPreviewImage] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editCaption, setEditCaption] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
   const [imageStatus, setImageStatus] = useState({});
   const [error, setError] = useState(null);
+  const [pendingInsert, setPendingInsert] = useState(null);
   const fileInputRef = useRef(null);
 
   /* Load images on mount */
@@ -200,6 +199,10 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
         }
         setGenProgress(`已生成 ${saved.length} 张配图`);
         await loadImages();
+        // 弹出插入确认对话框
+        if (saved.length > 0) {
+          setPendingInsert(saved[0]);
+        }
       } else {
         setGenProgress('未生成可用配图，请检查图片生成模型配置');
       }
@@ -284,6 +287,14 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
       console.error('更新说明失败:', e);
     }
   };
+
+  /* Confirm insert from dialog */
+  const confirmInsert = useCallback(() => {
+    if (pendingInsert && onInsertImage) {
+      onInsertImage(pendingInsert, { align: 'center', width: 720, insertAt: 'section' });
+    }
+    setPendingInsert(null);
+  }, [pendingInsert, onInsertImage]);
 
   /* ===== Render ===== */
   const hasImages = images.length > 0;
@@ -405,7 +416,6 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                   const status = imageStatus[img.id] || (img.filePath ? 'checking' : 'error');
                   const canUseImage = Boolean(img.filePath) && status !== 'error';
                   const info = getImageDisplayInfo(img);
-                  const expanded = expandedId === img.id;
                   const placeholderText = !img.filePath
                     ? '无图片路径'
                     : status === 'checking'
@@ -415,10 +425,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                   return (
                   <Card
                     key={img.id}
-                    className={cn(
-                      "group bg-card border border-border overflow-hidden enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300",
-                      expanded && "col-span-2"
-                    )}
+                    className="group bg-card border border-border overflow-hidden enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300"
                     style={{ '--enter-delay': `${idx * 50}ms` }}
                   >
                     {/* Image thumbnail - click to enlarge */}
@@ -478,14 +485,14 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                       )}
                     </div>
 
-                    {/* Caption */}
-                    <div className="p-2">
+                    {/* Bottom bar: insert buttons or caption edit */}
+                    <div className="px-2 pb-2 pt-1">
                       {editingId === img.id ? (
                         <div className="flex items-center gap-1">
                           <Input
                             value={editCaption}
                             onChange={(e) => setEditCaption(e.target.value)}
-                            className="h-6 text-[11px] px-1.5"
+                            className="h-6 text-[11px] px-1.5 flex-1"
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') saveCaption(img.id);
@@ -499,73 +506,11 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             <Check size={14} />
                           </button>
                         </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="flex w-full items-start justify-between gap-1 text-left"
-                          onClick={() => setExpandedId(expanded ? null : img.id)}
-                          title="查看对应段落说明"
-                        >
-                          <span className="min-w-0">
-                            <span className="block text-[10px] font-medium text-primary">
-                              {info.sectionLabel}
-                            </span>
-                            <span className={cn(
-                              "block text-[11px] text-muted-foreground leading-snug",
-                              expanded ? "" : "line-clamp-2 min-h-[2.2em]"
-                            )}>
-                              {info.title || '暂无说明'}
-                            </span>
-                          </span>
-                          {expanded ? (
-                            <ChevronUp size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
-                          )}
-                        </button>
-                      )}
-                      {expanded && (
-                        <div className="mt-2 rounded-md bg-muted/40 p-2 text-[11px] leading-relaxed text-muted-foreground">
-                          {info.content && (
-                            <p>
-                              <span className="font-medium text-foreground/70">段落摘要：</span>
-                              {info.content}
-                            </p>
-                          )}
-                          {info.topic && (
-                            <p className="mt-1">
-                              <span className="font-medium text-foreground/70">文章主题：</span>
-                              {info.topic}
-                            </p>
-                          )}
-                          {info.requirement && (
-                            <p className="mt-1 line-clamp-3">
-                              <span className="font-medium text-foreground/70">生成要求：</span>
-                              {info.requirement}
-                            </p>
-                          )}
-                          {!info.content && !info.topic && !info.requirement && (
-                            <p>暂无更多段落说明</p>
-                          )}
-                        </div>
-                      )}
-                      {img.generatedBy && (
-                        <p className="text-[9px] text-muted-foreground/50 mt-1 truncate">
-                          {img.generatedBy}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Insert button (non-readonly only) */}
-                    {!readonly && onInsertImage && (
-                      <div className="px-2 pb-2">
-                        <p className="mb-1 text-[10px] text-muted-foreground">
-                          插入到{info.sectionLabel}
-                        </p>
-                        <div className="grid grid-cols-2 gap-1">
+                      ) : !readonly && onInsertImage ? (
+                        <div className="flex items-center gap-1.5">
                           <button
                             className={cn(
-                              "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              "flex flex-1 items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
                               canUseImage
                                 ? "bg-primary/8 hover:bg-primary/15 text-primary"
                                 : "bg-muted text-muted-foreground/50 cursor-not-allowed"
@@ -579,7 +524,7 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                           </button>
                           <button
                             className={cn(
-                              "flex items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
+                              "flex flex-1 items-center justify-center gap-1 rounded-md text-[11px] font-medium py-1.5 transition-colors",
                               canUseImage
                                 ? "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
                                 : "bg-muted text-muted-foreground/50 cursor-not-allowed"
@@ -592,8 +537,8 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
                             左对齐
                           </button>
                         </div>
-                      </div>
-                    )}
+                      ) : null}
+                    </div>
                   </Card>
                   );
                 })}
@@ -612,6 +557,67 @@ export default function ImageGallery({ articleId, draftContent, readonly = false
           )}
         </div>
       </ScrollArea>
+
+      {/* Insert confirmation dialog */}
+      {pendingInsert && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-foreground/50 backdrop-blur-sm"
+            onClick={() => setPendingInsert(null)}
+          />
+          <div className="relative z-10 w-[320px] rounded-xl bg-card border border-border shadow-2xl overflow-hidden">
+            {/* Image preview */}
+            {pendingInsert.filePath && (
+              <div className="w-full bg-muted/30">
+                <img
+                  src={pendingInsert.filePath}
+                  alt={pendingInsert.caption || '配图'}
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+            )}
+            {/* Info */}
+            <div className="p-4">
+              <p className="text-[13px] font-medium text-foreground">
+                配图已生成
+              </p>
+              <p className="text-[12px] text-muted-foreground mt-1">
+                将插入到 <span className="font-medium text-primary">{(() => {
+                  const info = getImageDisplayInfo(pendingInsert);
+                  return info.sectionTitle || info.sectionLabel;
+                })()}</span> 段落后方
+              </p>
+              {(() => {
+                const info = getImageDisplayInfo(pendingInsert);
+                return info.content ? (
+                  <p className="text-[11px] text-muted-foreground/70 mt-1.5 line-clamp-2">
+                    {info.content}
+                  </p>
+                ) : null;
+              })()}
+              {/* Actions */}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-[12px]"
+                  onClick={() => setPendingInsert(null)}
+                >
+                  稍后手动插入
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 text-[12px]"
+                  onClick={confirmInsert}
+                >
+                  确认插入（居中）
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Lightbox preview dialog - portal to body for full-screen overlay */}
       {previewImage && createPortal(
