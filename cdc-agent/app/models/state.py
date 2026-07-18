@@ -195,6 +195,10 @@ class AgentState(BaseModel):
     # -- NEW: raw segments from API (used by segment_filter_node) ----------
     wiki_segments: Optional[List[dict]] = None
 
+    # -- segment_filter_node output (used by generation_meta) --------------
+    cited_segment_ids: List[int] = Field(default_factory=list)
+    cited_segment_count: int = 0
+
     # -- NEW: convenience copies from wiki_rule ----------------------------
     must_include: Optional[List[str]] = None
     must_not_say: Optional[List[str]] = None

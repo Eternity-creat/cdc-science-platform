@@ -373,7 +373,11 @@ async def _run_langgraph(compiled_graph, state_dict: dict) -> dict:
             if isinstance(node_output, dict):
                 result_state.update(node_output)
                 logger.debug(f"LangGraph 节点 [{node_name}] 完成")
-    
+
+    logger.info(
+        f"_run_langgraph 完成: cited_segment_count={result_state.get('cited_segment_count')}, "
+        f"cited_segment_ids={result_state.get('cited_segment_ids')}"
+    )
     return result_state
 
 

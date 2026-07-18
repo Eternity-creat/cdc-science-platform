@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any
 from app.skills.registry import SkillRegistry
 from app.models.state import AgentState
@@ -149,7 +150,30 @@ async def fusion_generate_node(state: AgentState) -> AgentState:
     state_for_skill = {**(state if isinstance(state, dict) else {**state}), "_dynamic_prompt": dynamic_prompt}
 
     result = await skill.execute(state_for_skill)
-    logger.info("节点 [fusion_generate] 完成")
+
+    # 从草稿中提取实际引用的 {ref:N} 标记，映射到 segment 数据库 ID
+    draft = result.get("initial_draft", "")
+    ref_numbers = sorted(set(int(m) for m in re.findall(r'\{ref:(\d+)\}', draft)))
+
+    wiki_segments = state.get("wiki_segments", []) or []
+    top_k_list = state.get("top_k_segment_list", []) or []
+    source = wiki_segments if wiki_segments else top_k_list
+
+    cited_ids = []
+    for n in ref_numbers:
+        idx = n - 1  # {ref:N} 是 1-based
+        if 0 <= idx < len(source):
+            seg = source[idx]
+            seg_id = seg.get("id") if isinstance(seg, dict) else getattr(seg, "id", None)
+            if seg_id is not None:
+                cited_ids.append(int(seg_id))
+
+    result["cited_segment_count"] = len(cited_ids)
+    result["cited_segment_ids"] = cited_ids
+
+    logger.info(
+        f"节点 [fusion_generate] 完成, 实际引用: {len(cited_ids)} 条 {cited_ids}"
+    )
     return result
 
 
