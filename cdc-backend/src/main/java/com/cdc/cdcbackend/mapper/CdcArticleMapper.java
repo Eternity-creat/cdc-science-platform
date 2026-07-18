@@ -15,6 +15,7 @@ public interface CdcArticleMapper {
     int autoSaveOutline(CdcArticle article);
     int autoSaveDraft(CdcArticle article);
     int autoSaveFinal(CdcArticle article);
+    int updateGenerationMeta(CdcArticle article);
     List<ArticleListItemDTO> listAll();
     List<ArticleListItemDTO> listPaged(@Param("offset") int offset, @Param("limit") int limit,
                                         @Param("status") Integer status, @Param("keyword") String keyword);

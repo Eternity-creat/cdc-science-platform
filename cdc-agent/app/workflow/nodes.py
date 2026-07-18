@@ -51,16 +51,24 @@ async def segment_filter_node(state: AgentState) -> AgentState:
 
     if not state.get("wiki_segments", []):
         logger.info("节点 [5/12] segment_filter 跳过，无wiki_segments")
-        return {"top_k_segment_list": []}
+        return {"top_k_segment_list": [], "cited_segment_ids": [], "cited_segment_count": 0}
 
     top_k_results, stats = retrieve_relevant_segments(state, top_k=10)
+
+    # 提取筛选后的 segment 数据库 ID 列表，传递给响应层
+    cited_ids = [int(s.get("id")) for s in top_k_results if s.get("id") is not None]
+
     logger.info(
         "节点 [5/12] segment_filter 完成，候选 {} -> {}，返回 {} 条",
         stats["total"],
         stats["candidates"],
         len(top_k_results),
     )
-    return {"top_k_segment_list": top_k_results}
+    return {
+        "top_k_segment_list": top_k_results,
+        "cited_segment_ids": cited_ids,
+        "cited_segment_count": len(cited_ids),
+    }
 
 
 async def template_load_node(state: AgentState) -> AgentState:

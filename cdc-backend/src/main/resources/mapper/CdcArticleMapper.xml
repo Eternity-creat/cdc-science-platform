@@ -22,6 +22,7 @@
         UPDATE cdc_article SET initial_draft=#{initialDraft}
         <if test="status != null and status &gt;= 4">, final_article=#{initialDraft}</if>
         <if test="status != null">, status=#{status}</if>
+        <if test="generationMeta != null">, generation_meta=#{generationMeta}</if>
         , update_time=NOW()
         WHERE id=#{id}
     </update>
@@ -43,6 +44,10 @@
 
     <update id="autoSaveFinal" parameterType="CdcArticle">
         UPDATE cdc_article SET final_article=#{finalArticle}, update_time=NOW() WHERE id=#{id}
+    </update>
+
+    <update id="updateGenerationMeta" parameterType="CdcArticle">
+        UPDATE cdc_article SET generation_meta=#{generationMeta}, update_time=NOW() WHERE id=#{id}
     </update>
 
     <select id="listAll" resultType="com.cdc.cdcbackend.dto.ArticleListItemDTO">

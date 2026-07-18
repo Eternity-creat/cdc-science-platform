@@ -34,19 +34,19 @@ public class AgentClient {
     @Resource
     private AgentConfig agentConfig;
 
-    public String generateOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context) {
+    public Map<String, Object> generateOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context) {
         return buildAndCall(articleId, req, context, "outline", null);
     }
 
-    public String generateDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent) {
+    public Map<String, Object> generateDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent) {
         return buildAndCall(articleId, req, context, "draft", previousContent);
     }
 
-    public String streamOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context, Consumer<String> onChunk) {
+    public Map<String, Object> streamOutline(Long articleId, CdcArticleRequest req, WikiTemplateContext context, Consumer<String> onChunk) {
         return buildAndStream(articleId, req, context, "outline", null, onChunk);
     }
 
-    public String streamDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent, Consumer<String> onChunk) {
+    public Map<String, Object> streamDraft(Long articleId, CdcArticleRequest req, WikiTemplateContext context, String previousContent, Consumer<String> onChunk) {
         return buildAndStream(articleId, req, context, "draft", previousContent, onChunk);
     }
 
@@ -129,23 +129,23 @@ public class AgentClient {
         return params;
     }
 
-    private String buildAndCall(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
+    private Map<String, Object> buildAndCall(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
                                 String step, String previousContent) {
         Map<String, Object> params = buildParams(articleId, req, context, step, previousContent);
         String agentUrl = agentConfig.getUrl() + "/api/agent/generate";
         try {
             String rawResponse = restTemplate.postForObject(agentUrl, params, String.class);
-            log.debug("Agent 原始响应 (前200字符): {}", 
-                rawResponse != null && rawResponse.length() > 200 
+            log.debug("Agent 原始响应 (前200字符): {}",
+                rawResponse != null && rawResponse.length() > 200
                     ? rawResponse.substring(0, 200) + "..." : rawResponse);
-            return extractContent(rawResponse, step);
+            return extractResponse(rawResponse, step);
         } catch (Exception e) {
             log.error("调用 Agent 服务失败: {}", e.getMessage(), e);
             throw new RuntimeException("Agent 服务异常：" + e.getMessage(), e);
         }
     }
 
-    private String buildAndStream(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
+    private Map<String, Object> buildAndStream(Long articleId, CdcArticleRequest req, WikiTemplateContext context,
                                   String step, String previousContent, Consumer<String> onChunk) {
         Map<String, Object> params = buildParams(articleId, req, context, step, previousContent);
         String agentUrl = agentConfig.getUrl() + "/api/agent/generate/stream";
@@ -171,12 +171,13 @@ public class AgentClient {
             StringBuilder content = new StringBuilder();
             String currentEvent = "message";
             StringBuilder dataBuffer = new StringBuilder();
+            String[] generationMetaHolder = new String[1]; // capture generation_meta from done event
 
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.isEmpty()) {
-                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk);
+                        handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, generationMetaHolder);
                         currentEvent = "message";
                         dataBuffer.setLength(0);
                         continue;
@@ -190,19 +191,23 @@ public class AgentClient {
                     }
                 }
                 if (dataBuffer.length() > 0) {
-                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk);
+                    handleSseMessage(currentEvent, dataBuffer.toString(), content, onChunk, generationMetaHolder);
                 }
             }
 
             log.info("Agent SSE 完成 (step={}, 长度={})", step, content.length());
-            return content.toString();
+            Map<String, Object> result = new HashMap<>();
+            result.put("content", content.toString());
+            result.put("generationMeta", generationMetaHolder[0]);
+            return result;
         } catch (Exception e) {
             log.error("调用 Agent SSE 服务失败: {}", e.getMessage(), e);
             throw new RuntimeException("Agent SSE 服务异常：" + e.getMessage(), e);
         }
     }
 
-    private void handleSseMessage(String event, String data, StringBuilder content, Consumer<String> onChunk) throws Exception {
+    private void handleSseMessage(String event, String data, StringBuilder content,
+                                   Consumer<String> onChunk, String[] generationMetaHolder) throws Exception {
         if (data == null || data.isBlank()) return;
         if ("error".equals(event)) {
             JsonNode root = objectMapper.readTree(data);
@@ -220,6 +225,13 @@ public class AgentClient {
                     content.append(replacement);
                 }
             }
+            // 从 done 事件中提取 generation_meta
+            if ("done".equals(event)) {
+                JsonNode metaNode = root.get("generation_meta");
+                if (metaNode != null && metaNode.isObject()) {
+                    generationMetaHolder[0] = objectMapper.writeValueAsString(metaNode);
+                }
+            }
             return;
         }
 
@@ -235,48 +247,63 @@ public class AgentClient {
     }
 
     /**
-     * 从 Agent 结构化响应 (AgentResponse JSON) 中提取 content 字段。
-     * 
-     * Agent 返回格式: {"content":"...", "images":[], "quality_metrics":{...}, ...}
-     * 此方法只提取 content，避免将整个 JSON 存入数据库。
-     * 兼容降级：如果响应不是合法 JSON，则原样返回。
+     * 从 Agent 结构化响应 (AgentResponse JSON) 中提取 content 和 generation_meta。
+     *
+     * 返回 Map: {"content": String, "generationMeta": String (JSON)}
+     * generationMeta 可能为 null（如果 Agent 响应中没有该字段）。
      */
-    private String extractContent(String rawResponse, String step) {
+    private Map<String, Object> extractResponse(String rawResponse, String step) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("content", "");
+        result.put("generationMeta", null);
+
         if (rawResponse == null || rawResponse.isBlank()) {
             log.warn("Agent 返回空响应 (step={})", step);
-            return "";
+            return result;
         }
-        
+
         String trimmed = rawResponse.trim();
-        // 快速判断是否为 JSON 对象
         if (!trimmed.startsWith("{")) {
             log.warn("Agent 响应非 JSON 格式 (step={}), 原样返回", step);
-            return rawResponse;
+            result.put("content", rawResponse);
+            return result;
         }
-        
+
         try {
             JsonNode root = objectMapper.readTree(trimmed);
             JsonNode contentNode = root.get("content");
-            
+
             if (contentNode != null && contentNode.isTextual()) {
                 String content = contentNode.asText();
                 log.info("成功提取 Agent 响应 content (step={}, 长度={})", step, content.length());
-                return content;
+                result.put("content", content);
             }
-            
-            // content 字段不存在或不是字符串 — 可能是错误响应
-            JsonNode detailNode = root.get("detail");
-            if (detailNode != null) {
-                String errorMsg = detailNode.asText();
-                log.error("Agent 返回错误: {}", errorMsg);
-                throw new RuntimeException("Agent 错误：" + errorMsg);
+
+            // 提取 generation_meta
+            JsonNode metaNode = root.get("generation_meta");
+            if (metaNode != null && metaNode.isObject()) {
+                result.put("generationMeta", objectMapper.writeValueAsString(metaNode));
             }
-            
-            log.warn("Agent 响应中未找到 content 字段 (step={}), 原样返回", step);
-            return rawResponse;
+
+            // 检查错误
+            if (contentNode == null || !contentNode.isTextual()) {
+                JsonNode detailNode = root.get("detail");
+                if (detailNode != null) {
+                    String errorMsg = detailNode.asText();
+                    log.error("Agent 返回错误: {}", errorMsg);
+                    throw new RuntimeException("Agent 错误：" + errorMsg);
+                }
+                log.warn("Agent 响应中未找到 content 字段 (step={}), 原样返回", step);
+                result.put("content", rawResponse);
+            }
+
+            return result;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("解析 Agent JSON 响应失败 (step={}): {}, 原样返回", step, e.getMessage());
-            return rawResponse;
+            result.put("content", rawResponse);
+            return result;
         }
     }
 }

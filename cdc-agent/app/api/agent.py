@@ -187,13 +187,20 @@ async def generate(request: AgentRequest) -> AgentResponse:
                 token_data = tu
         
         logger.info(f"生成完成: article_id={request.article_id}, 耗时={cost_time}ms, 长度={len(content)}")
-        
+
+        gen_meta = {
+            "total_cost_ms": cost_time,
+            "content_length": len(content),
+            "citedSegmentCount": result_state.get("cited_segment_count", 0),
+            "citedSegmentIds": result_state.get("cited_segment_ids", []),
+        }
+
         return AgentResponse(
             content=content,
             quality_metrics=quality,
             trace=trace_list,
             token_usage=token_data,
-            generation_meta={"total_cost_ms": cost_time, "content_length": len(content)}
+            generation_meta=gen_meta
         )
     
     except Exception as e:
@@ -320,6 +327,8 @@ async def generate_stream(request: AgentRequest):
                 "generation_meta": {
                     "total_cost_ms": cost_time,
                     "content_length": len(full_text),
+                    "citedSegmentCount": result_state.get("cited_segment_count", 0),
+                    "citedSegmentIds": result_state.get("cited_segment_ids", []),
                 },
             })
 

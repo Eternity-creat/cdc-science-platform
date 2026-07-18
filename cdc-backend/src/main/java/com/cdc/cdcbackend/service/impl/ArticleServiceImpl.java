@@ -8,6 +8,7 @@ import com.cdc.cdcbackend.agent.AgentClient;
 import com.cdc.cdcbackend.service.ArticleService;
 import com.cdc.cdcbackend.service.EmbeddingService;
 import com.cdc.cdcbackend.service.WikiService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
@@ -221,6 +222,17 @@ public class ArticleServiceImpl implements ArticleService {
 
         context.setSegments(segments);
 
+        // 4.6 从 generation_meta 读取引用统计
+        if (article.getGenerationMeta() != null && !article.getGenerationMeta().isBlank()) {
+            try {
+                JsonNode metaNode = objectMapper.readTree(article.getGenerationMeta());
+                JsonNode citedNode = metaNode.get("citedSegmentCount");
+                if (citedNode != null && citedNode.isNumber()) {
+                    context.setCitedSegmentCount(citedNode.asInt());
+                }
+            } catch (Exception ignored) {}
+        }
+
         // 5. 查询所有实体的规则
         List<String> mustInclude = new ArrayList<>();
         List<String> mustNotSay = new ArrayList<>();
@@ -338,7 +350,8 @@ public class ArticleServiceImpl implements ArticleService {
         // 计时开始
         long start = System.currentTimeMillis();
 
-        String outline = agentClient.generateOutline(articleId, req, context);
+        Map<String, Object> outlineResult = agentClient.generateOutline(articleId, req, context);
+        String outline = (String) outlineResult.get("content");
 
         int costTime = (int) (System.currentTimeMillis() - start);
 
@@ -363,7 +376,9 @@ public class ArticleServiceImpl implements ArticleService {
 
         String previousContent = article.getOutline();
 
-        String draft = agentClient.generateDraft(articleId, req, context, previousContent);
+        Map<String, Object> draftResult = agentClient.generateDraft(articleId, req, context, previousContent);
+        String draft = (String) draftResult.get("content");
+        String genMeta = (String) draftResult.get("generationMeta");
 
         int costTime = (int) (System.currentTimeMillis() - start);
 
@@ -374,6 +389,15 @@ public class ArticleServiceImpl implements ArticleService {
         articleMapper.updateInitialDraft(up);
 
         saveTrace(articleId, "generate_draft", req.toString(), draft, costTime);
+
+        // 保存 Agent 返回的 generation_meta（含引用统计）
+        if (genMeta != null) {
+            CdcArticle metaUp = new CdcArticle();
+            metaUp.setId(articleId);
+            metaUp.setGenerationMeta(genMeta);
+            articleMapper.updateGenerationMeta(metaUp);
+        }
+
         return draft;
     }
 
@@ -416,12 +440,21 @@ public class ArticleServiceImpl implements ArticleService {
                 }
 
                 String previousContent = "draft".equals(step) ? article.getOutline() : null;
-                String content = "outline".equals(step)
+                Map<String, Object> streamResult = "outline".equals(step)
                     ? agentClient.streamOutline(articleId, req, context, chunk -> sendDelta(emitter, chunk))
                     : agentClient.streamDraft(articleId, req, context, previousContent, chunk -> sendDelta(emitter, chunk));
+                String content = (String) streamResult.get("content");
+                String genMeta = (String) streamResult.get("generationMeta");
 
                 int costTime = (int) (System.currentTimeMillis() - start);
                 persistGeneratedContent(articleId, step, content);
+
+                if ("draft".equals(step) && genMeta != null) {
+                    CdcArticle metaUp = new CdcArticle();
+                    metaUp.setId(articleId);
+                    metaUp.setGenerationMeta(genMeta);
+                    articleMapper.updateGenerationMeta(metaUp);
+                }
 
                 if (pendingModification != null) {
                     pendingModification.setAfterContent(content);
@@ -560,7 +593,7 @@ public class ArticleServiceImpl implements ArticleService {
 
         // 6. 生成大纲
         long start = System.currentTimeMillis();
-        String outline = agentClient.generateOutline(article.getId(), request, context);
+        String outline = (String) agentClient.generateOutline(article.getId(), request, context).get("content");
         int costTime = (int) (System.currentTimeMillis() - start);
 
         CdcArticle up = new CdcArticle();
@@ -661,7 +694,7 @@ public class ArticleServiceImpl implements ArticleService {
         }
 
         long start = System.currentTimeMillis();
-        String outline = agentClient.generateOutline(articleId, req, context);
+        String outline = (String) agentClient.generateOutline(articleId, req, context).get("content");
         int costTime = (int) (System.currentTimeMillis() - start);
 
         // Update the modification record with the new content
@@ -705,7 +738,9 @@ public class ArticleServiceImpl implements ArticleService {
 
         long start = System.currentTimeMillis();
         String previousContent = article.getOutline();
-        String draft = agentClient.generateDraft(articleId, req, context, previousContent);
+        Map<String, Object> draftResult = agentClient.generateDraft(articleId, req, context, previousContent);
+        String draft = (String) draftResult.get("content");
+        String genMeta = (String) draftResult.get("generationMeta");
         int costTime = (int) (System.currentTimeMillis() - start);
 
         CdcArticle up = new CdcArticle();
@@ -715,6 +750,15 @@ public class ArticleServiceImpl implements ArticleService {
         articleMapper.updateInitialDraft(up);
 
         saveTrace(articleId, "regenerate_draft", req.toString(), draft, costTime);
+
+        // 保存 Agent 返回的 generation_meta（含引用统计）
+        if (genMeta != null) {
+            CdcArticle metaUp = new CdcArticle();
+            metaUp.setId(articleId);
+            metaUp.setGenerationMeta(genMeta);
+            articleMapper.updateGenerationMeta(metaUp);
+        }
+
         return draft;
     }
 

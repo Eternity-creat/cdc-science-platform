@@ -1723,11 +1723,11 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                       </div>
                     </div>
                   )}
-                  {context.segments && context.segments.length > 0 && (
+                  {context.segments && context.segments.length > 0 && context.citedSegmentCount > 0 && (
                     <div className="enter" style={{ '--enter-delay': '300ms' }}>
                       <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">知识引用</div>
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        引用的 {context.segments.length} 条知识片段已标注在文章正文中，将鼠标悬浮到绿色的「原文」标签上可查看来源。
+                        引用的 {context.citedSegmentCount} 条知识片段已标注在文章正文中，将鼠标悬浮到绿色的「原文」标签上可查看来源。
                       </p>
                     </div>
                   )}
