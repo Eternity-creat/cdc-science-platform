@@ -170,6 +170,7 @@ class AgentState(BaseModel):
 
     # -- User input --------------------------------------------------------
     entity_name: Optional[str] = None
+    entity_alias: Optional[str] = None
     population_name: Optional[str] = None
     scene_name: Optional[str] = None
     template_name: Optional[str] = None

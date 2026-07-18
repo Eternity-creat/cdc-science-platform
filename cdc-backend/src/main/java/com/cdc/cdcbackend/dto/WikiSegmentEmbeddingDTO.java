@@ -11,6 +11,8 @@ import lombok.Data;
 public class WikiSegmentEmbeddingDTO {
     private Long id;
     private Long entityId;
+    /** 片段所属实体类型：1疾病、2疫苗、3人群、4场景 */
+    private Integer entityType;
     private String content;
     private String source;
     /** 预计算的向量 JSON 字符串，如 "[0.1, 0.2, ...]" */

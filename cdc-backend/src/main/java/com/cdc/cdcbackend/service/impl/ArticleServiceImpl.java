@@ -153,38 +153,15 @@ public class ArticleServiceImpl implements ArticleService {
         CdcArticleRequest req = requestMapper.getById(article.getRequestId());
 
         // 2. 查询实体
-        WikiEntity entity = wikiEntityMapper.getById(req.getEntityId());
-        WikiEntity population = wikiEntityMapper.getById(req.getPopulationId());
-        WikiEntity scene = wikiEntityMapper.getById(req.getSceneId());
+        WikiEntity entity = req.getEntityId() != null ? wikiEntityMapper.getById(req.getEntityId()) : null;
+        WikiEntity population = req.getPopulationId() != null ? wikiEntityMapper.getById(req.getPopulationId()) : null;
+        WikiEntity scene = req.getSceneId() != null ? wikiEntityMapper.getById(req.getSceneId()) : null;
         CdcArticleTemplate template = articleTemplateMapper.getById(req.getTemplateId());
 
         // 设置实体信息
-        if (entity != null) {
-            WikiTemplateContext.WikiEntityInfo entityInfo = new WikiTemplateContext.WikiEntityInfo();
-            entityInfo.setId(entity.getId());
-            entityInfo.setStdName(entity.getStdName());
-            entityInfo.setAlias(entity.getAlias());
-            entityInfo.setSummary(entity.getSummary());
-            context.setEntity(entityInfo);
-        }
-
-        if (population != null) {
-            WikiTemplateContext.WikiEntityInfo popInfo = new WikiTemplateContext.WikiEntityInfo();
-            popInfo.setId(population.getId());
-            popInfo.setStdName(population.getStdName());
-            popInfo.setAlias(population.getAlias());
-            popInfo.setSummary(population.getSummary());
-            context.setPopulation(popInfo);
-        }
-
-        if (scene != null) {
-            WikiTemplateContext.WikiEntityInfo sceneInfo = new WikiTemplateContext.WikiEntityInfo();
-            sceneInfo.setId(scene.getId());
-            sceneInfo.setStdName(scene.getStdName());
-            sceneInfo.setAlias(scene.getAlias());
-            sceneInfo.setSummary(scene.getSummary());
-            context.setScene(sceneInfo);
-        }
+        context.setEntity(toEntityInfo(entity, req.getEntityName()));
+        context.setPopulation(toEntityInfo(population, req.getPopulationName()));
+        context.setScene(toEntityInfo(scene, req.getSceneName()));
 
         // 设置模板信息
         if (template != null) {
@@ -198,22 +175,29 @@ public class ArticleServiceImpl implements ArticleService {
         }
 
         // 3. 查询关联实体
-        List<Long> allEntityIds = new ArrayList<>();
-        allEntityIds.add(req.getEntityId());
+        Set<Long> entityIdSet = new LinkedHashSet<>();
 
+        if (req.getEntityId() != null) {
+            entityIdSet.add(req.getEntityId());
+        }
         if (req.getPopulationId() != null) {
-            allEntityIds.add(req.getPopulationId());
+            entityIdSet.add(req.getPopulationId());
         }
         if (req.getSceneId() != null) {
-            allEntityIds.add(req.getSceneId());
+            entityIdSet.add(req.getSceneId());
         }
 
         // 获取主实体的关联实体
-        List<WikiRelation> relations = relationMapper.listByFromEid(req.getEntityId());
-        for (WikiRelation rel : relations) {
-            allEntityIds.add(rel.getToEid());
+        if (req.getEntityId() != null) {
+            List<WikiRelation> relations = relationMapper.listByFromEid(req.getEntityId());
+            for (WikiRelation rel : relations) {
+                if (rel.getToEid() != null) {
+                    entityIdSet.add(rel.getToEid());
+                }
+            }
         }
 
+        List<Long> allEntityIds = new ArrayList<>(entityIdSet);
         context.setEntityIds(allEntityIds);
 
         // 4. 查询所有实体的片段（含预计算向量）
@@ -224,6 +208,7 @@ public class ArticleServiceImpl implements ArticleService {
                 WikiTemplateContext.WikiSegmentInfo segInfo = new WikiTemplateContext.WikiSegmentInfo();
                 segInfo.setId(s.getId());
                 segInfo.setEntityId(s.getEntityId());
+                segInfo.setEntityType(s.getEntityType());
                 segInfo.setContent(s.getContent());
                 segInfo.setSource(s.getSource());
                 segInfo.setEmbedding(s.getEmbedding());
@@ -257,6 +242,23 @@ public class ArticleServiceImpl implements ArticleService {
         context.setMustNotSay(mustNotSay);
 
         return context;
+    }
+
+    private WikiTemplateContext.WikiEntityInfo toEntityInfo(WikiEntity entity, String fallbackName) {
+        if (entity == null && (fallbackName == null || fallbackName.isBlank())) {
+            return null;
+        }
+
+        WikiTemplateContext.WikiEntityInfo info = new WikiTemplateContext.WikiEntityInfo();
+        if (entity != null) {
+            info.setId(entity.getId());
+            info.setStdName(entity.getStdName());
+            info.setAlias(entity.getAlias());
+            info.setSummary(entity.getSummary());
+        } else {
+            info.setStdName(fallbackName.trim());
+        }
+        return info;
     }
 
     /**
@@ -515,28 +517,32 @@ public class ArticleServiceImpl implements ArticleService {
         String entityName = (String) parsed.get("entity_name");
         String populationName = (String) parsed.get("population_name");
         String sceneName = (String) parsed.get("scene_name");
-        Integer wordCount = (Integer) parsed.getOrDefault("word_count", 800);
+        Object parsedWordCount = parsed.getOrDefault("word_count", 800);
+        Integer wordCount = parsedWordCount instanceof Number number ? number.intValue() : 800;
 
         Integer entityType = getEntityType((String) parsed.get("entity_type"));
 
-        WikiEntity entity = wikiEntityMapper.findByName(entityName, entityType);
-        WikiEntity population = populationName != null ? wikiEntityMapper.findByName(populationName, 3) : null;
-        WikiEntity scene = sceneName != null ? wikiEntityMapper.findByName(sceneName, 4) : null;
+        WikiEntity entity = resolveEntity(entityName, entityType);
+        WikiEntity population = resolveEntity(populationName, 3);
+        WikiEntity scene = resolveEntity(sceneName, 4);
 
         if (entity == null) {
-            throw new RuntimeException("未找到实体: " + entityName);
+            log.info("自由文本实体未命中知识库，降级为无知识片段生成: entity={}", entityName);
         }
 
         // 3. 创建请求记录
         CdcArticleRequest request = new CdcArticleRequest();
         request.setMode(2);
         request.setEntityType(entityType);
-        request.setEntityId(entity.getId());
+        request.setEntityId(entity != null ? entity.getId() : null);
         request.setPopulationId(population != null ? population.getId() : null);
         request.setSceneId(scene != null ? scene.getId() : null);
         request.setTemplateId(templateId);
         request.setWordCount(wordCount);
         request.setUserText(userText);
+        request.setEntityName(entity != null ? entity.getStdName() : normalizeEntityName(entityName));
+        request.setPopulationName(population != null ? population.getStdName() : normalizeEntityName(populationName));
+        request.setSceneName(scene != null ? scene.getStdName() : normalizeEntityName(sceneName));
         request.setCreateTime(LocalDateTime.now());
         requestMapper.insert(request);
 
@@ -566,6 +572,29 @@ public class ArticleServiceImpl implements ArticleService {
         saveTrace(article.getId(), "generate_outline", request.toString(), outline, costTime);
 
         return new ArticleCreateResult(article.getId(), article.getStatus(), context);
+    }
+
+    WikiEntity resolveEntity(String name, int entityType) {
+        String normalizedName = normalizeEntityName(name);
+        if (normalizedName == null) {
+            return null;
+        }
+
+        WikiEntity exact = wikiEntityMapper.findByName(normalizedName, entityType);
+        if (exact != null) {
+            return exact;
+        }
+
+        List<WikiEntity> fuzzyMatches = wikiEntityMapper.fuzzySearch(normalizedName, entityType);
+        return fuzzyMatches != null && fuzzyMatches.size() == 1 ? fuzzyMatches.get(0) : null;
+    }
+
+    private String normalizeEntityName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String normalized = name.trim().replace(" ", "");
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private Integer getEntityType(String typeStr) {

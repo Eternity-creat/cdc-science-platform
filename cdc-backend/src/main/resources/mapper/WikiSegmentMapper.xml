@@ -9,6 +9,7 @@
         SELECT
             s.id,
             s.entity_id AS entityId,
+            w.entity_type AS entityType,
             s.content,
             s.source,
             e.embedding,
@@ -16,6 +17,7 @@
             e.model_version AS modelVersion
         FROM wiki_segment s
         LEFT JOIN wiki_segment_embedding e ON s.id = e.segment_id
+        LEFT JOIN wiki_entity w ON s.entity_id = w.id
         WHERE s.entity_id = #{entityId}
         ORDER BY s.id
     </select>

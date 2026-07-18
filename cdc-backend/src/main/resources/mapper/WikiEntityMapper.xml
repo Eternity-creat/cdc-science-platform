@@ -50,8 +50,26 @@
         SELECT id,std_name FROM wiki_entity WHERE entity_type=#{type}
     </select>
     <select id="findByName" resultType="WikiEntity">
-        SELECT * FROM wiki_entity 
-        WHERE std_name = #{name} AND entity_type = #{type}
+        SELECT * FROM wiki_entity
+        WHERE entity_type = #{type}
+          AND (
+              std_name = #{name}
+              OR FIND_IN_SET(#{name}, REPLACE(REPLACE(alias, ' ', ''), '，', ',')) > 0
+          )
         LIMIT 1
+    </select>
+    <select id="fuzzySearch" resultType="WikiEntity">
+        SELECT * FROM wiki_entity
+        WHERE entity_type = #{type}
+          AND (
+              std_name LIKE CONCAT('%', #{name}, '%')
+              OR #{name} LIKE CONCAT('%', std_name, '%')
+              OR alias LIKE CONCAT('%', #{name}, '%')
+          )
+        ORDER BY
+          CASE WHEN std_name LIKE CONCAT(#{name}, '%') THEN 0 ELSE 1 END,
+          CHAR_LENGTH(std_name),
+          id
+        LIMIT 5
     </select>
 </mapper>

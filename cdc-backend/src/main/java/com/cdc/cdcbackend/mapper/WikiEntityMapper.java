@@ -18,4 +18,6 @@ public interface WikiEntityMapper {
     List<WikiEntity> listByType(@Param("type") Integer type);
 
     WikiEntity findByName(@Param("name") String name, @Param("type") Integer type);
+
+    List<WikiEntity> fuzzySearch(@Param("name") String name, @Param("type") Integer type);
 }

@@ -16,6 +16,7 @@ class WikiSegmentItem(BaseModel):
     content: str
     source: Optional[str] = ""
     embedding: Optional[List[float]] = None  # 预计算的向量（来自 wiki_segment_embedding 表）
+    owner_entity_type: Optional[int] = None  # 1疾病、2疫苗、3人群、4场景
 
 
 class AgentRequest(BaseModel):
@@ -59,6 +60,9 @@ class RetrieveRequest(BaseModel):
     """向量检索请求"""
     entity_name: str
     population_name: Optional[str] = ""
+    scene_name: Optional[str] = ""
+    entity_alias: Optional[str] = ""
+    user_text: Optional[str] = ""
     wiki_segments: List[WikiSegmentItem] = []
     top_k: int = 10
 

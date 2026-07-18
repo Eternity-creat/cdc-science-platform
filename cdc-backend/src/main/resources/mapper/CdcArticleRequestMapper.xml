@@ -6,9 +6,11 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO cdc_article_request
-        (mode, entity_type, entity_id, population_id, scene_id, template_id, word_count, user_text, create_time)
+        (mode, entity_type, entity_id, population_id, scene_id, template_id, word_count, user_text,
+         entity_name, population_name, scene_name, create_time)
         VALUES
-            (#{mode}, #{entityType}, #{entityId}, #{populationId}, #{sceneId}, #{templateId}, #{wordCount}, #{userText}, NOW())
+            (#{mode}, #{entityType}, #{entityId}, #{populationId}, #{sceneId}, #{templateId}, #{wordCount}, #{userText},
+             #{entityName}, #{populationName}, #{sceneName}, NOW())
     </insert>
 
     <select id="getById" resultType="CdcArticleRequest">

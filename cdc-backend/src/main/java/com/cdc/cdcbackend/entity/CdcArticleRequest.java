@@ -13,5 +13,8 @@ public class CdcArticleRequest {
     private Long templateId;
     private Integer wordCount;
     private String userText;
+    private String entityName;
+    private String populationName;
+    private String sceneName;
     private LocalDateTime createTime;
 }

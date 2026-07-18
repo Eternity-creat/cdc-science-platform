@@ -45,52 +45,20 @@ async def wiki_relation_node(state: AgentState) -> AgentState:
 
 
 async def segment_filter_node(state: AgentState) -> AgentState:
-    """5. 片段筛选：基于向量相似度从 wiki_segments 中选取相关内容。
-    
-    两种模式：
-    - 预计算向量模式（推荐）：片段携带 embedding 字段时，只计算查询向量，用缓存向量做 top-k
-    - 实时嵌入模式（兜底）：无 embedding 字段时，对所有片段实时计算 embedding
-    
-    注意：此节点与 template_load 并行执行，只返回修改的字段避免 LangGraph 并发冲突。
-    """
-    from app.tools.vector_store import VectorStore
-    
-    wiki_segments = state.get("wiki_segments", [])
-    if not wiki_segments:
+    """5. 片段筛选：按实体类型预过滤后再做向量相似度排序。"""
+    from app.tools.rag_retrieval import retrieve_relevant_segments
+
+    if not state.get("wiki_segments", []):
         logger.info("节点 [5/12] segment_filter 跳过，无wiki_segments")
         return {"top_k_segment_list": []}
-    
-    entity_name = state.get("entity_name", "")
-    population_name = state.get("population_name", "")
-    query_text = entity_name
-    if population_name:
-        query_text += " " + population_name
-    
-    # 检测是否有预计算向量
-    has_embeddings = any(
-        isinstance(seg, dict) and seg.get("embedding")
-        for seg in wiki_segments
+
+    top_k_results, stats = retrieve_relevant_segments(state, top_k=10)
+    logger.info(
+        "节点 [5/12] segment_filter 完成，候选 {} -> {}，返回 {} 条",
+        stats["total"],
+        stats["candidates"],
+        len(top_k_results),
     )
-    
-    vector_store = VectorStore()
-    
-    if has_embeddings:
-        # 快速路径：用 DB 缓存向量，只计算 1 次查询 embedding
-        top_k_results = vector_store.search_with_embeddings(
-            query_text=query_text,
-            segments=wiki_segments,
-            top_k=10
-        )
-        logger.info(f"节点 [5/12] segment_filter 完成（预计算向量模式），返回 {len(top_k_results)} 条")
-    else:
-        # 兜底路径：实时计算所有片段 embedding
-        top_k_results = vector_store.search_in_memory(
-            query_text=query_text,
-            segments=wiki_segments,
-            top_k=10
-        )
-        logger.info(f"节点 [5/12] segment_filter 完成（实时嵌入模式），返回 {len(top_k_results)} 条")
-    
     return {"top_k_segment_list": top_k_results}
 
 

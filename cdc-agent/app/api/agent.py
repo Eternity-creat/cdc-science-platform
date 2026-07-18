@@ -10,7 +10,7 @@ from app.skills.registry import SkillRegistry
 from app.skills.flow.intent_parse_skill import IntentParseSkill
 from app.skills.flow.section_analyze_skill import SectionAnalyzeSkill
 from app.skills.flow.image_generate_skill import ImageGenerateSkill
-from app.tools.vector_store import VectorStore
+from app.tools.rag_retrieval import retrieve_relevant_segments
 from app.core.config import settings
 from app.core.streaming import (
     reset_stream_callback,
@@ -111,31 +111,19 @@ async def retrieve(request: RetrieveRequest) -> RetrieveResponse:
     logger.info(f"接收到检索请求: entity={request.entity_name}, segments={len(request.wiki_segments)}")
     
     try:
-        vector_store = VectorStore()
-        
-        query_text = request.entity_name
-        if request.population_name:
-            query_text += " " + request.population_name
-        
-        segments = [s.dict() for s in request.wiki_segments]
-        
-        # 检测是否有预计算向量
-        has_embeddings = any(s.get("embedding") for s in segments)
-        
-        if has_embeddings:
-            top_k_results = vector_store.search_with_embeddings(
-                query_text=query_text,
-                segments=segments,
-                top_k=request.top_k
-            )
-        else:
-            top_k_results = vector_store.search_in_memory(
-                query_text=query_text,
-                segments=segments,
-                top_k=request.top_k
-            )
-        
-        logger.info(f"检索完成: 返回 {len(top_k_results)} 条 (预计算={has_embeddings})")
+        state = {
+            "entity_name": request.entity_name,
+            "entity_alias": request.entity_alias,
+            "population_name": request.population_name,
+            "scene_name": request.scene_name,
+            "user_text": request.user_text,
+            "wiki_segments": [s.model_dump() for s in request.wiki_segments],
+        }
+        top_k_results, stats = retrieve_relevant_segments(state, top_k=request.top_k)
+        logger.info(
+            "检索完成: 候选 {} -> {}, 返回 {} 条 ({})",
+            stats["total"], stats["candidates"], len(top_k_results), stats["mode"]
+        )
         
         return RetrieveResponse(
             top_k_segments=top_k_results,
@@ -371,6 +359,7 @@ def _build_outline_state(request: AgentRequest) -> AgentState:
             seg_dict = {
                 "id": s.id,
                 "entity_id": s.entity_id,
+                "owner_entity_type": s.owner_entity_type,
                 "content": s.content,
                 "source": s.source or ""
             }
@@ -383,6 +372,7 @@ def _build_outline_state(request: AgentRequest) -> AgentState:
         "step": request.step,
         "article_id": request.article_id,
         "entity_name": request.entity_name or "",
+        "entity_alias": request.entity_alias or "",
         "population_name": request.population_name or "",
         "scene_name": request.scene_name or "",
         "template_name": request.template_name or "",

@@ -98,6 +98,7 @@ public class AgentClient {
                 Map<String, Object> seg = new HashMap<>();
                 seg.put("id", s.getId());
                 seg.put("entity_id", s.getEntityId());
+                seg.put("owner_entity_type", s.getEntityType());
                 seg.put("content", s.getContent());
                 seg.put("source", s.getSource());
                 // 将 embedding JSON 字符串解析为 List，Agent 端期望 List[float]
@@ -120,6 +121,7 @@ public class AgentClient {
         // 规则
         params.put("must_include", context.getMustInclude() != null ? context.getMustInclude() : new ArrayList<>());
         params.put("must_not_say", context.getMustNotSay() != null ? context.getMustNotSay() : new ArrayList<>());
+        params.put("user_text", req.getUserText() != null ? req.getUserText() : "");
 
         // 之前的内容
         params.put("previous_content", previousContent);
