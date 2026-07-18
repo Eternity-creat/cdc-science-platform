@@ -408,7 +408,7 @@ export default function Workbench() {
     return 'final'; // 4 or 5
   })();
 
-  /* ===== Load article on mount ===== */
+  /* ===== Load article + extras on mount ===== */
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -430,6 +430,20 @@ export default function Workbench() {
         if (art.finalArticle) {
           setFinalText(art.finalArticle);
         }
+
+        // 如果已进入初稿/终稿阶段，立刻并行加载上下文、轨迹、修改记录
+        // 避免 article 先渲染而 context 延迟导致引用标签和右侧面板闪烁
+        if (art.status >= 3) {
+          const [traces, mods, ctx] = await Promise.all([
+            articleApi.getTrace(id).catch(() => []),
+            articleApi.getModifications(id).catch(() => []),
+            articleApi.getArticleContext(id).catch(() => null),
+          ]);
+          if (cancelled) return;
+          setPipelineSteps(parseTraceToSteps(traces));
+          setModifications(parseModifications(mods));
+          setContext(ctx);
+        }
       } catch (e) {
         console.error('加载文章失败:', e);
         toast.error('加载文章失败', { description: e.message || '请刷新页面重试' });
@@ -441,9 +455,11 @@ export default function Workbench() {
     return () => { cancelled = true; };
   }, [id]);
 
-  /* ===== Load extras (trace, mods, context) when entering draft/final ===== */
+  /* ===== Load extras when phase changes to draft/final after outline ===== */
   useEffect(() => {
     if (phase === 'outline') return;
+    // 如果 context 已经在首次加载时拿到了，跳过
+    if (context) return;
     let cancelled = false;
     async function loadExtras() {
       try {
