@@ -1650,7 +1650,7 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
   const [selectedMod, setSelectedMod] = useState(null);
 
   return (
-    <div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-hidden border-l enter" style={{ '--enter-delay': '200ms' }}>
+    <div className="hidden lg:flex w-[350px] shrink-0 flex-col overflow-hidden border-l enter" style={{ '--enter-delay': '200ms' }}>
       <Tabs value={rightTab} onValueChange={setRightTab} className="flex flex-1 flex-col overflow-hidden">
         <div className="border-b">
           <TabsList className="h-auto w-full justify-start bg-transparent rounded-none p-0 px-1 gap-0">
