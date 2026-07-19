@@ -138,7 +138,13 @@ export default function Pipeline({ steps = [], compact = false, onStepClick }) {
             : 0;
 
           return (
-            <Card key={step.id} className="border bg-card">
+            <Card key={step.id} className={cn(
+              'border bg-card border-l-2',
+              step.status === 'success' && 'border-l-[hsl(var(--success))]',
+              step.status === 'running' && 'border-l-[hsl(var(--info))]',
+              step.status === 'failed' && 'border-l-destructive',
+              (step.status === 'pending' || step.status === 'skipped') && 'border-l-muted-foreground/30'
+            )}>
               <CardContent className="p-3">
                 <button
                   className="flex w-full items-start gap-3 text-left"

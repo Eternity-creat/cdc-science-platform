@@ -7,7 +7,7 @@ import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
   RefreshCw, RotateCcw, AlertTriangle, X, List, Search,
-  FileText, Users, MapPin, BookOpen, Shield,
+  FileText, Users, MapPin, BookOpen, Shield, Edit3,
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../components/ui/button.jsx';
@@ -1424,16 +1424,27 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen, revertingId 
   const diff = buildModificationDiff(mod.before, mod.after);
   const changes = diff.changes.slice(0, 3);
   const delta = mod.summary?.deltaChars || 0;
+  const isAi = mod.operationType === 'ai_generate' || mod.operationType === 'ai_regenerate';
+  const isRevert = mod.operationType === 'revert';
 
   return (
-    <Card className="bg-card border border-border enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300" style={{ '--enter-delay': `${index * 50}ms` }}>
+    <Card
+      className={cn(
+        'bg-card border border-border border-l-2 enter-scale hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300',
+        isAi && 'border-l-primary',
+        isRevert && 'border-l-amber-500',
+        !isAi && !isRevert && 'border-l-muted-foreground/40'
+      )}
+      style={{ '--enter-delay': `${index * 50}ms` }}
+    >
       <CardContent className="p-3.5">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <Badge variant="secondary" className="text-[10px]">
               {mod.type === 'outline' ? '大纲' : mod.type === 'initial_draft' ? '初稿' : '终稿'}
             </Badge>
-            <span className="truncate text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+              {isAi ? <Sparkles size={10} className="text-primary shrink-0" /> : isRevert ? <RotateCcw size={10} className="text-amber-500 shrink-0" /> : <Edit3 size={10} className="shrink-0" />}
               {OPERATION_LABELS[mod.operationType] || mod.operationType}
             </span>
           </div>
@@ -1453,16 +1464,16 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen, revertingId 
         </div>
 
         <div className="mb-2 grid grid-cols-3 gap-1 text-center text-[10px]">
-          <div className="rounded bg-muted/50 px-1.5 py-1">
-            <div className="font-medium text-foreground">{mod.summary.changedParts}</div>
+          <div className="rounded-md bg-muted/40 px-1.5 py-1.5">
+            <div className="text-[12px] font-semibold text-foreground">{mod.summary.changedParts}</div>
             <div className="text-muted-foreground">变更处</div>
           </div>
-          <div className="rounded bg-muted/50 px-1.5 py-1">
-            <div className="font-medium text-destructive">{mod.summary.removedLines}</div>
+          <div className="rounded-md bg-muted/40 px-1.5 py-1.5">
+            <div className="text-[12px] font-semibold text-destructive">{mod.summary.removedLines}</div>
             <div className="text-muted-foreground">删除处</div>
           </div>
-          <div className="rounded bg-muted/50 px-1.5 py-1">
-            <div className={cn('font-medium', delta < 0 ? 'text-destructive' : delta > 0 ? 'text-[hsl(var(--success))]' : 'text-foreground')}>
+          <div className="rounded-md bg-muted/40 px-1.5 py-1.5">
+            <div className={cn('text-[12px] font-semibold', delta < 0 ? 'text-destructive' : delta > 0 ? 'text-[hsl(var(--success))]' : 'text-foreground')}>
               {delta > 0 ? `+${delta}` : delta}
             </div>
             <div className="text-muted-foreground">字符</div>
@@ -1470,17 +1481,27 @@ function ModificationCard({ mod, index, readonly, onRevert, onOpen, revertingId 
         </div>
 
         {changes.length > 0 ? (
-          <div className="rounded-[var(--radius-sm)] bg-background p-2 font-mono text-[11px] leading-relaxed">
+          <div className="rounded-md bg-muted/20 p-2 font-mono text-[11px] leading-relaxed">
             {changes.map((change, i) => (
               <div key={`change-${i}`} className="mb-1 last:mb-0">
-                {change.before && <div className="text-destructive"><span className="opacity-60">- </span>{makeContentPreview(change.before, 64)}</div>}
-                {change.after && <div className="text-[hsl(var(--success))]"><span className="opacity-60">+ </span>{makeContentPreview(change.after, 64)}</div>}
+                {change.before && (
+                  <div className="flex items-start gap-1.5 rounded-sm border-l-2 border-destructive/40 bg-destructive/5 px-1.5 py-0.5 text-destructive">
+                    <span className="opacity-50 shrink-0">-</span>
+                    <span className="break-all">{makeContentPreview(change.before, 64)}</span>
+                  </div>
+                )}
+                {change.after && (
+                  <div className="flex items-start gap-1.5 rounded-sm border-l-2 border-[hsl(var(--success))]/40 bg-[hsl(var(--success))]/5 px-1.5 py-0.5 text-[hsl(var(--success))]">
+                    <span className="opacity-50 shrink-0">+</span>
+                    <span className="break-all">{makeContentPreview(change.after, 64)}</span>
+                  </div>
+                )}
               </div>
             ))}
-            {diff.changes.length > changes.length && <div className="text-muted-foreground">还有 {diff.changes.length - changes.length} 处变更...</div>}
+            {diff.changes.length > changes.length && <div className="mt-1 text-[10px] text-muted-foreground">还有 {diff.changes.length - changes.length} 处变更...</div>}
           </div>
         ) : (
-          <div className="rounded-[var(--radius-sm)] bg-background p-2 text-[11px] text-muted-foreground">
+          <div className="rounded-md bg-muted/20 p-2 text-[11px] text-muted-foreground">
             {mod.previewAfter || mod.previewBefore || '暂无可预览内容'}
           </div>
         )}
@@ -1724,14 +1745,14 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                               {context.population && (
                                 <div className="flex items-center gap-2.5 px-3.5 py-2.5">
                                   <Users size={13} className="text-muted-foreground/60 shrink-0" />
-                                  <span className="text-[11px] text-muted-foreground w-14 shrink-0">目标人群</span>
+                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">目标人群</span>
                                   <span className="text-[12px] font-medium text-foreground">{context.population.stdName}</span>
                                 </div>
                               )}
                               {context.scene && (
                                 <div className="flex items-center gap-2.5 px-3.5 py-2.5">
                                   <MapPin size={13} className="text-muted-foreground/60 shrink-0" />
-                                  <span className="text-[11px] text-muted-foreground w-14 shrink-0">场景</span>
+                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">场景</span>
                                   <span className="text-[12px] font-medium text-foreground">{context.scene.stdName}</span>
                                 </div>
                               )}
@@ -1805,7 +1826,7 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                     </div>
                   )}
 
-                  {/* ===== 知识引用（可展开摘要列表） ===== */}
+                  {/* ===== 知识引用 ===== */}
                   {context.segments && context.segments.length > 0 && context.citedSegmentCount > 0 && (
                     <div className="enter" style={{ '--enter-delay': '280ms' }}>
                       <Card className="border-border">
@@ -1817,31 +1838,9 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                               {context.citedSegmentCount} 条
                             </Badge>
                           </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2.5">
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
                             已标注在文章正文中，悬停绿色「原文」标签可查看来源。
                           </p>
-                          <div className="flex flex-col gap-1.5">
-                            {context.segments.slice(0, 5).map((seg, i) => (
-                              <div
-                                key={seg.id || i}
-                                className="group/seg relative rounded-md bg-muted/30 px-2.5 py-2 text-[11px] hover:bg-muted/50 transition-colors"
-                              >
-                                {seg.source && (
-                                  <span className="text-[10px] text-muted-foreground/60 font-medium">
-                                    {seg.source}
-                                  </span>
-                                )}
-                                <p className="text-muted-foreground/80 mt-0.5 leading-relaxed line-clamp-2">
-                                  {seg.content?.length > 80 ? seg.content.slice(0, 80) + '…' : seg.content}
-                                </p>
-                              </div>
-                            ))}
-                            {context.segments.length > 5 && (
-                              <div className="text-[10px] text-muted-foreground/50 text-center pt-1">
-                                还有 {context.segments.length - 5} 条引用片段
-                              </div>
-                            )}
-                          </div>
                         </CardContent>
                       </Card>
                     </div>
