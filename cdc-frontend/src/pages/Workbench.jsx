@@ -1743,16 +1743,16 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
                           {(context.population || context.scene) && (
                             <div className="divide-y divide-border">
                               {context.population && (
-                                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-                                  <Users size={13} className="text-muted-foreground/60 shrink-0" />
-                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">目标人群</span>
+                                <div className="grid grid-cols-[16px_64px_1fr] items-center gap-x-2.5 px-3.5 py-2.5">
+                                  <Users size={13} className="text-muted-foreground/60" />
+                                  <span className="text-[11px] text-muted-foreground">目标人群</span>
                                   <span className="text-[12px] font-medium text-foreground">{context.population.stdName}</span>
                                 </div>
                               )}
                               {context.scene && (
-                                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-                                  <MapPin size={13} className="text-muted-foreground/60 shrink-0" />
-                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">场景</span>
+                                <div className="grid grid-cols-[16px_64px_1fr] items-center gap-x-2.5 px-3.5 py-2.5">
+                                  <MapPin size={13} className="text-muted-foreground/60" />
+                                  <span className="text-[11px] text-muted-foreground">场景</span>
                                   <span className="text-[12px] font-medium text-foreground">{context.scene.stdName}</span>
                                 </div>
                               )}

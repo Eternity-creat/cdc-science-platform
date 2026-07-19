@@ -35,9 +35,9 @@ function formatNumber(value) {
 
 function Metric({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-md border bg-background px-2.5 py-2">
-      <div className="mb-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-        <Icon size={11} /> {label}
+    <div className="rounded-md border bg-background px-2 py-2">
+      <div className="mb-1 flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap">
+        <Icon size={10} className="shrink-0" /> {label}
       </div>
       <div className="text-sm font-semibold text-foreground">{value}</div>
     </div>
