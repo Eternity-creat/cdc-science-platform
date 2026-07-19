@@ -6,7 +6,8 @@ import { diffLines, diffWordsWithSpace } from 'diff';
 import {
   ChevronRight, ChevronDown, Save, Wand2, FileCheck2, Clock,
   ArrowLeft, Download, Eye, Loader2, Sparkles, CheckCircle2,
-  RefreshCw, RotateCcw, AlertTriangle, X, List, Search
+  RefreshCw, RotateCcw, AlertTriangle, X, List, Search,
+  FileText, Users, MapPin, BookOpen, Shield,
 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../components/ui/button.jsx';
@@ -1697,83 +1698,152 @@ function RightPanel({ rightTab, setRightTab, pipelineSteps, modifications, conte
         {/* Context tab */}
         <TabsContent value="context" className="flex-1 overflow-hidden mt-0">
           <ScrollArea className="h-full">
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-3 p-4">
               {context ? (
                 <>
-                  {context.entity && (
+                  {/* ===== 合并实体信息卡片 ===== */}
+                  {(context.entity || context.population || context.scene) && (
                     <div className="enter" style={{ '--enter-delay': '0ms' }}>
-                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">实体信息</div>
-                      <Card className="bg-card border border-border hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300">
-                        <CardContent className="p-3.5">
-                          <div className="text-[13px] font-medium text-foreground mb-1">{context.entity.stdName}</div>
-                          {context.entity.alias && <div className="text-[11px] text-muted-foreground">别名：{context.entity.alias}</div>}
+                      <Card className="border-border overflow-hidden">
+                        <div className="bg-muted/40 px-3.5 py-2.5 border-b border-border flex items-center gap-2">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
+                            <Sparkles size={12} className="text-primary" />
+                          </div>
+                          <span className="text-[12px] font-medium text-foreground">
+                            {context.entity?.stdName || '实体信息'}
+                          </span>
+                          {context.entity?.alias && (
+                            <span className="text-[11px] text-muted-foreground ml-auto">
+                              {context.entity.alias}
+                            </span>
+                          )}
+                        </div>
+                        <CardContent className="p-0">
+                          {(context.population || context.scene) && (
+                            <div className="divide-y divide-border">
+                              {context.population && (
+                                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+                                  <Users size={13} className="text-muted-foreground/60 shrink-0" />
+                                  <span className="text-[11px] text-muted-foreground w-14 shrink-0">目标人群</span>
+                                  <span className="text-[12px] font-medium text-foreground">{context.population.stdName}</span>
+                                </div>
+                              )}
+                              {context.scene && (
+                                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+                                  <MapPin size={13} className="text-muted-foreground/60 shrink-0" />
+                                  <span className="text-[11px] text-muted-foreground w-14 shrink-0">场景</span>
+                                  <span className="text-[12px] font-medium text-foreground">{context.scene.stdName}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     </div>
                   )}
-                  {(context.population || context.scene) && (
-                    <div className="grid grid-cols-2 gap-2 enter" style={{ '--enter-delay': '60ms' }}>
-                      {context.population && (
-                        <Card className="bg-card border border-border hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300">
-                          <CardContent className="p-3.5">
-                            <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">目标人群</div>
-                            <div className="text-[13px] font-medium text-foreground">{context.population.stdName}</div>
-                          </CardContent>
-                        </Card>
-                      )}
-                      {context.scene && (
-                        <Card className="bg-card border border-border hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300">
-                          <CardContent className="p-3.5">
-                            <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">场景</div>
-                            <div className="text-[13px] font-medium text-foreground">{context.scene.stdName}</div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
-                  )}
+
+                  {/* ===== 使用模板 ===== */}
                   {context.template && (
-                    <div className="enter" style={{ '--enter-delay': '120ms' }}>
-                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">使用模板</div>
-                      <Card className="bg-card border border-border hover:shadow-[var(--shadow-elevated)] transition-shadow duration-300">
-                        <CardContent className="p-3.5">
-                          <div className="text-[13px] font-medium text-foreground mb-0.5">{context.template.templateName}</div>
-                          <div className="text-[11px] text-muted-foreground">{context.template.purpose}</div>
+                    <div className="enter" style={{ '--enter-delay': '60ms' }}>
+                      <Card className="border-border">
+                        <CardContent className="p-3.5 flex items-start gap-2.5">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/30 mt-0.5">
+                            <FileText size={14} className="text-blue-500" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-medium text-foreground">{context.template.templateName}</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{context.template.purpose}</div>
+                          </div>
                         </CardContent>
                       </Card>
                     </div>
                   )}
+
+                  {/* ===== 必须包含（绿色调卡片） ===== */}
                   {context.mustInclude && context.mustInclude.length > 0 && (
-                    <div className="enter" style={{ '--enter-delay': '180ms' }}>
-                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">必须包含</div>
-                      <div className="flex flex-col gap-1.5 px-1">
-                        {context.mustInclude.map((item, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground enter" style={{ '--enter-delay': `${200 + i * 30}ms` }}>
-                            <CheckCircle2 size={12} className="shrink-0 text-[hsl(var(--success))]" />
-                            {item}
+                    <div className="enter" style={{ '--enter-delay': '120ms' }}>
+                      <Card className="border-emerald-200/60 dark:border-emerald-900/30 bg-emerald-50/40 dark:bg-emerald-950/10">
+                        <CardContent className="p-3.5">
+                          <div className="flex items-center gap-1.5 mb-2.5">
+                            <CheckCircle2 size={13} className="text-emerald-500" />
+                            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">必须包含</span>
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex flex-col gap-1.5">
+                            {context.mustInclude.map((item, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px] text-emerald-800/80 dark:text-emerald-300/80 enter" style={{ '--enter-delay': `${140 + i * 30}ms` }}>
+                                <span className="mt-[5px] h-1 w-1 rounded-full bg-emerald-400 shrink-0" />
+                                <span className="leading-relaxed">{item}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   )}
+
+                  {/* ===== 禁止用语（红色调卡片） ===== */}
                   {context.mustNotSay && context.mustNotSay.length > 0 && (
-                    <div className="enter" style={{ '--enter-delay': '240ms' }}>
-                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">禁止用语</div>
-                      <div className="flex flex-col gap-1.5 px-1">
-                        {context.mustNotSay.map((item, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground enter" style={{ '--enter-delay': `${260 + i * 30}ms` }}>
-                            <Badge variant="warning" className="text-[10px] px-1.5">禁</Badge>
-                            {item}
+                    <div className="enter" style={{ '--enter-delay': '200ms' }}>
+                      <Card className="border-red-200/60 dark:border-red-900/30 bg-red-50/40 dark:bg-red-950/10">
+                        <CardContent className="p-3.5">
+                          <div className="flex items-center gap-1.5 mb-2.5">
+                            <Shield size={13} className="text-red-500" />
+                            <span className="text-[11px] font-semibold text-red-700 dark:text-red-400">禁止用语</span>
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex flex-col gap-1.5">
+                            {context.mustNotSay.map((item, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px] text-red-800/80 dark:text-red-300/80 enter" style={{ '--enter-delay': `${220 + i * 30}ms` }}>
+                                <span className="mt-[3px] shrink-0">
+                                  <X size={10} className="text-red-400" />
+                                </span>
+                                <span className="leading-relaxed">{item}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   )}
+
+                  {/* ===== 知识引用（可展开摘要列表） ===== */}
                   {context.segments && context.segments.length > 0 && context.citedSegmentCount > 0 && (
-                    <div className="enter" style={{ '--enter-delay': '300ms' }}>
-                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">知识引用</div>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        引用的 {context.citedSegmentCount} 条知识片段已标注在文章正文中，将鼠标悬浮到绿色的「原文」标签上可查看来源。
-                      </p>
+                    <div className="enter" style={{ '--enter-delay': '280ms' }}>
+                      <Card className="border-border">
+                        <CardContent className="p-3.5">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <BookOpen size={13} className="text-amber-500" />
+                            <span className="text-[11px] font-semibold text-foreground">知识引用</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto">
+                              {context.citedSegmentCount} 条
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2.5">
+                            已标注在文章正文中，悬停绿色「原文」标签可查看来源。
+                          </p>
+                          <div className="flex flex-col gap-1.5">
+                            {context.segments.slice(0, 5).map((seg, i) => (
+                              <div
+                                key={seg.id || i}
+                                className="group/seg relative rounded-md bg-muted/30 px-2.5 py-2 text-[11px] hover:bg-muted/50 transition-colors"
+                              >
+                                {seg.source && (
+                                  <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                    {seg.source}
+                                  </span>
+                                )}
+                                <p className="text-muted-foreground/80 mt-0.5 leading-relaxed line-clamp-2">
+                                  {seg.content?.length > 80 ? seg.content.slice(0, 80) + '…' : seg.content}
+                                </p>
+                              </div>
+                            ))}
+                            {context.segments.length > 5 && (
+                              <div className="text-[10px] text-muted-foreground/50 text-center pt-1">
+                                还有 {context.segments.length - 5} 条引用片段
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
                   )}
                 </>
