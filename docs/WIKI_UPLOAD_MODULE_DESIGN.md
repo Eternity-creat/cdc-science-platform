@@ -1,318 +1,174 @@
-# Wiki 文档上传模块方案设计
+# Wiki 文档上传模块实现说明
 
-更新时间：2026-07-02
+最后更新：2026-07-19
 
-## 目标
+本文档描述 `cdc-backend` 中 Wiki 文档上传模块的**当前实现**。它已经完整实现并接入前端 Wiki 管理页。
 
-建设一个本地轻量文档处理流程，把上传的权威指南、历史文章、问答对、模板说明等资料转成统一 Wiki 数据，最终服务于 Agent 生成。
+> 早期版本（v1.0 / v1.1 阶段）的"方案设计"内容已废弃；当前实现完整覆盖了原方案 2（本地轻量文档处理工作流）的所有目标，PDF 解析也已落地。
 
-本方案选择“方案 2：独立轻量文档处理工作流”作为落地方案；“方案 1：外部文档解析 API”作为复杂 PDF 或扫描件场景的兜底能力。
+## 实现位置
 
-## 当前已有基础
+| 文件 | 作用 |
+|---|---|
+| `controller/WikiUploadController.java` | `POST /api/wiki/upload`、`GET /api/wiki/upload/{taskId}`、`POST /api/wiki/upload/{taskId}/confirm` |
+| `service/WikiUploadService.java` | 接口 |
+| `service/impl/WikiUploadServiceImpl.java` | 落盘 → 解析 → 预览 → 确认入库 |
+| `event/SegmentChangedEvent.java` | 片段变更 Spring 事件（CREATED/UPDATED/DELETED） |
+| `event/EmbeddingEventListener.java` | 监听 `SegmentChangedEvent`，异步计算 embedding 并入库（**不走 Agent**） |
+| `service/EmbeddingService.java` | Java 直接调 DashScope `/embeddings`（OpenAI 兼容 REST），含 `cdc_embedding_cache` 哈希去重 |
+| `config/AsyncConfig.java` | `embeddingExecutor` 线程池（core=2 / max=4 / queue=50） |
 
-本地后端已存在：
+## 端到端流程
 
-- `cdc_upload_task` 表
-- `CdcUploadTask.java`
-- `CdcUploadTaskMapper.java`
-- `CdcUploadTaskMapper.xml`
-
-当前代码里未检索到明确的 Wiki 文档上传 Controller，例如：
-
-- `POST /api/wiki/upload`
-- `MultipartFile`
-- `UploadController`
-
-因此目前可判断为：**已预留上传任务表和 Mapper，但完整上传接口、解析、清洗、分段、入库流程尚未实现或未同步到当前代码。**
-
-补充核查结果：
-
-- 前端 Wiki 页面有“导入”按钮，位于 `cdc-frontend/src/pages/WikiManagement.jsx`。
-- 当前按钮绑定的 `handleImport` 逻辑为 `toast.info('功能开发中')`，没有真正上传文件。
-- 前端 `cdc-frontend/src/api/wiki.js` 中没有 upload API 封装。
-- 后端 `cdc-backend` 中没有检索到 `MultipartFile`、`/api/wiki/upload`、`UploadController` 等上传接口实现。
-
-因此“预留上传接口”在当前本地代码里更准确地说是：**Wiki 页面预留了导入入口，数据库预留了上传任务表，但接口和处理流程还需要补开发。**
-
-## 两方案对比
-
-| 维度 | 方案 1：外部文档解析 API | 方案 2：本地轻量文档处理流程 |
-| --- | --- | --- |
-| 实现速度 | 快 | 中等 |
-| 数据可控性 | 依赖外部服务 | 完全本地可控 |
-| 数据合规 | 需确认资料能否外传 | 更适合疾控资料 |
-| 复杂 PDF 支持 | 通常较好 | 取决于解析库和 OCR |
-| 返回格式 | 外部 API 决定，需适配 | 可按 Wiki schema 设计 |
-| 稳定性 | 受外部服务影响 | 受本地服务影响 |
-| 成本 | 可能付费 | 主要是开发维护成本 |
-| 长期扩展 | 受供应商限制 | 可加入审核、去重、版本管理 |
-
-## 选型结论
-
-选择方案 2 作为主流程，原因：
-
-- 疾控知识库需要长期沉淀，不能只做文件附件管理。
-- 数据最终要写入 `wiki_entity`、`wiki_segment`、`wiki_rule`、`wiki_relation`、`wiki_segment_embedding`。
-- 本地流程可控，便于和现有数据库 schema、Agent 上下文结构对齐。
-- 上传资料可能包含权威指南或内部整理资料，本地处理更稳妥。
-
-保留方案 1 作为兜底：
-
-- 扫描 PDF、复杂版式 PDF、本地解析质量差时，可接入外部文档解析 API。
-- 外部解析结果仍必须经过本地标准化和审核后才能入库。
-
-## 总体流程
-
-```text
-前端上传文件
-→ 后端接收文件
-→ 保存原始文件
-→ 创建 cdc_upload_task
-→ 异步解析文档
-→ 文本清洗
-→ 文本分段
-→ 实体识别和字段抽取
-→ 生成标准化 Wiki JSON
-→ 人工确认或自动入库
-→ 写入 wiki_entity / wiki_segment / wiki_rule / wiki_relation
-→ 触发 wiki_segment_embedding 生成
-→ 更新 cdc_upload_task 状态
+```http
+┌──────────────┐                  ┌────────────────────┐                  ┌──────────────────┐
+│ 前端 Wiki 页  │                  │ cdc-backend         │                  │ DashScope         │
+│ WikiManagement│                 │ WikiUploadServiceImpl│                 │ /embeddings       │
+└──────┬───────┘                  └──────────┬─────────┘                  └────────┬─────────┘
+       │ POST /api/wiki/upload (multipart)    │                                       │
+       │─────────────────────────────────────►│ 1. 保存文件到 uploads/wiki/{uuid}.{ext}│
+       │                                      │ 2. 插 cdc_upload_task (status=0)      │
+       │                                      │ 3. parseFile() 按扩展名分支解析        │
+       │                                      │    - json : parseJson()               │
+       │                                      │    - md/txt/docx/pdf: extractText()   │
+       │                                      │ 4. 构造 WikiUploadPreviewDTO           │
+       │                                      │ 5. 更新 task status=1                 │
+       │ ◄────────────────────────────────── │ 返回预览                               │
+       │  {taskId, entities[], segmentCount,  │                                       │
+       │   ruleCount, warnings[]}             │                                       │
+       │                                      │                                       │
+       │ POST /api/wiki/upload/{taskId}/confirm│                                       │
+       │─────────────────────────────────────►│ @Transactional                        │
+       │                                      │ 对每个 entity:                         │
+       │                                      │  • findByName 命中 → 整段删除           │
+       │                                      │    (先发 SegmentChangedEvent DELETED)  │
+       │                                      │  • insert entity / segments / rules    │
+       │                                      │  • 每条新 segment 发 CREATED 事件      │
+       │ ◄────────────────────────────────── │ 返回 {insertedCount, overwrittenCount, │
+       │  {insertedCount, segmentCount, ...}  │   segmentCount, ruleCount}            │
+       │                                      │                                       │
+       │                                      │ @Async("embeddingExecutor")            │
+       │                                      │ EmbeddingEventListener.onSegmentChanged│
+       │                                      │  • DELETED → wiki_segment_embedding    │
+       │                                      │    .deleteBySegmentId                 │
+       │                                      │  • CREATED/UPDATED →                  │
+       │                                      │      1. computeContentHash (MD5)       │
+       │                                      │      2. embeddingService.compute... ───►│ POST /embeddings
+       │                                      │      3. 序列化为 JSON                  │ ◄──── vector
+       │                                      │      4. wiki_segment_embedding.upsert  │
+       │                                      │                                       │
 ```
 
-## 建议接口设计
+## 支持的输入格式
 
-### 上传文件
+| 扩展名 | 解析方式 | 库 |
+|---|---|---|
+| `.json` | 直接 `ObjectMapper.readTree()`，支持单对象 / `{entities:[...]}` / `[...]` 三种顶层结构 | Jackson（自带） |
+| `.md` / `.txt` | 按 UTF-8 全文读取，正则识别 `# ` 标题、`MustInclude:` / `禁止表述:` 等规则行 | JDK |
+| `.docx` | `XWPFDocument.getParagraphs()` 拼接 | Apache POI 5.2.5 |
+| `.pdf` | `PDFTextStripper.getText()` | PDFBox 3.0.2 |
 
-```text
-POST /api/wiki/upload
-Content-Type: multipart/form-data
-```
+不支持的扩展名直接抛 `RuntimeException("不支持的文件类型: <ext>")`。
 
-请求字段：
+## JSON 解析规则
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `file` | File | 是 | 上传文件 |
-| `entityType` | int | 否 | 1疾病、2疫苗、3人群、4场景 |
-| `entityName` | string | 否 | 指定实体名，未传则由系统识别 |
-| `sourceType` | string | 否 | guideline/article/qa/manual |
-| `updateMode` | string | 否 | append/merge/overwrite |
-| `needReview` | boolean | 否 | 是否需要人工确认 |
+`parseJsonEntity()` 容忍多种字段命名方式（camelCase / snake_case / 中英别名），最终都映射成统一的 `WikiUploadEntityDTO`：
 
-响应：
+| 标准化字段 | 接受的 JSON 键名 |
+|---|---|
+| `entityType` | `entityType`, `entity_type`, `type` |
+| `stdName` | `stdName`, `std_name`, `name`, `title` |
+| `alias` | `alias`（数组或字符串都接受，字符串内部用 Jackson 序列化） |
+| `summary` | `summary`, `intro`, `description` |
+| segments | `segments`, `wikiSegments`, `wiki_segments`, `authoritativeSegments`, `fragments`（可同时出现在多个字段里，全部合并） |
+| rules | `rules`（每个元素可以是字符串或 `{ruleType, content}` 对象） |
+| MustInclude | `mustInclude`, `must_include` |
+| MustNotSay | `mustNotSay`, `must_not_say` |
 
-```json
-{
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "taskId": 1,
-    "status": 0
-  }
+> 如果 `segments` 为空但有 `summary`，会自动把 `summary` 作为唯一一条 segment 入库，保证 Agent 至少有一段可用知识。
+
+## 非 JSON 文件的解析规则
+
+`md/txt/docx/pdf` 走统一的 `parseText()`：
+
+1. **实体名**：取第一个 `# 标题` 行；否则用文件名（去扩展名）
+2. **summary**：取第一个非规则行、非标题的段落，超过 500 字截断
+3. **规则行识别前缀**：
+   - `MustInclude:` / `MustInclude：` / `必须包含:` / `必须包含：` → `MustInclude`
+   - `MustNotSay:` / `MustNotSay：` / `禁止表述:` / `禁止表述：` / `不能说:` / `不能说：` → `MustNotSay`
+4. **segments 切分**：按段落聚合，每段 >900 字触发切片；规则行、标题行不进入 segments；`source` 默认为 `文件名:扩展名`
+
+## 任务状态机
+
+`cdc_upload_task.status` 当前定义：
+
+| status | 含义 | 设置时机 |
+|---|---|---|
+| 0 | uploaded | 文件已落盘 |
+| 1 | parsed | 解析完成，前端可预览 |
+| 2 | imported | 用户已确认入库 |
+| 3 | failed | 解析或处理失败，`result_msg` 记录原因 |
+
+> 注：早期方案文档里写的"0 待处理 / 1 处理中 / 2 解析完成待确认 / 3 已入库 / 4 失败"与实际实现不一致，实际就是 0/1/2/3 这四态。
+
+## 入库策略
+
+**当前实现采用「同名实体覆盖」策略**（不是方案文档里提到的 `merge`）：
+
+```java
+WikiEntity old = entityMapper.findByName(item.getStdName(), item.getEntityType());
+if (old != null) {
+    deleteExistingEntity(old.getId());  // 级联删除旧 segments / rules / relations
+    result.setOverwrittenCount(result.getOverwrittenCount() + 1);
+} else {
+    result.setInsertedCount(result.getInsertedCount() + 1);
 }
 ```
 
-### 查询任务
+`deleteExistingEntity` 顺序：先对每条旧 segment 发 `DELETED` 事件（让 EmbeddingEventListener 同步删除 `wiki_segment_embedding` 记录），再删 segments / rules / relations / entity 本体。
+
+## Embedding 异步补算
+
+`@Async("embeddingExecutor") @EventListener` 模式，**不经过 Agent**：
 
 ```text
-GET /api/wiki/upload/task/{taskId}
+SegmentChangedEvent  ──►  EmbeddingEventListener.onSegmentChanged
+                              │
+                              ├─ DELETED   → wiki_segment_embedding.deleteBySegmentId
+                              └─ CREATED   → computeContentHash (MD5)
+                                  UPDATED     ↓
+                                            EmbeddingService.computeEmbedding
+                                                │
+                                                ├─ 优先 cdc_embedding_cache 命中复用
+                                                └─ 未命中 → POST DashScope /embeddings (batch≤25)
+                                                              │
+                                                              ↓
+                                            WikiSegmentEmbedding upsert
+                                              (segment_id, entity_id, content_hash,
+                                               embedding JSON, model_version, dimensions)
 ```
 
-响应：
+设计取舍（直接看 `EmbeddingEventListener` 顶部注释）：Embedding 计算放在 Java 端是为了**减少跳数、降低与 Agent 的耦合**。Agent 只负责文章生成这种重度 LLM 任务，embedding 这种纯 REST 调用由 Java 直接打 DashScope。
 
-```json
-{
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "id": 1,
-    "fileName": "HPV疫苗指南.pdf",
-    "filePath": "uploads/wiki/20260702/HPV疫苗指南.pdf",
-    "status": 2,
-    "resultMsg": "解析完成，待确认：1个实体、12条片段、3条规则"
-  }
-}
-```
+## 接口契约
 
-### 确认入库
+完整接口定义和示例见 `docs/WIKI_UPLOAD_API_USAGE.md`。本文档不再重复。
 
-```text
-POST /api/wiki/upload/task/{taskId}/confirm
-```
+## 不再适用的事项
 
-用于 `needReview=true` 时，把解析结果正式写入 Wiki 表。
+下列内容是早期方案设计时的考量，**当前实现已做出不同取舍**，留作历史记录：
 
-### 取消任务
+- ~~`updateMode: append/merge/overwrite` 模式选择~~ → 实际只支持覆盖（同名实体）
+- ~~`sourceType: guideline/article/qa/manual` 分类~~ → 实际由 `wiki_segment.source` 自由文本记录
+- ~~`needReview` 开关~~ → 实际一律先预览后确认，无自动入库分支
+- ~~扫描 PDF / OCR 兜底~~ → 暂未实现，仅支持可复制文本型 PDF
+- ~~XLSX/CSV~~ → 暂未实现
+- ~~"外部文档解析 API"作为方案 1 兜底~~ → 未接入
 
-```text
-DELETE /api/wiki/upload/task/{taskId}
-```
+## 仍可演进的方向
 
-用于取消待确认或失败任务。
-
-## 状态设计
-
-建议 `cdc_upload_task.status` 定义为：
-
-| 状态 | 含义 |
-| --- | --- |
-| 0 | 待处理 |
-| 1 | 处理中 |
-| 2 | 解析完成，待确认 |
-| 3 | 已入库 |
-| 4 | 失败 |
-
-如果第一版不做人审，可以简化为：
-
-| 状态 | 含义 |
-| --- | --- |
-| 0 | 待处理 |
-| 1 | 处理中 |
-| 2 | 成功 |
-| 3 | 失败 |
-
-建议保留“待确认”，因为 Wiki 知识会直接影响 Agent 输出。
-
-## 标准化 Wiki JSON
-
-解析完成后统一成以下结构：
-
-```json
-{
-  "entity": {
-    "entityType": 2,
-    "stdName": "HPV疫苗",
-    "alias": ["人乳头瘤病毒疫苗", "HPV vaccine"],
-    "summary": "用于预防 HPV 感染及相关疾病的疫苗。"
-  },
-  "segments": [
-    {
-      "title": "接种对象",
-      "content": "推荐适龄人群接种，具体年龄范围以说明书和当地政策为准。",
-      "source": "上传文件：HPV疫苗指南.pdf"
-    }
-  ],
-  "rules": [
-    {
-      "ruleType": "MustInclude",
-      "content": "应说明接种对象和免疫程序"
-    },
-    {
-      "ruleType": "MustNotSay",
-      "content": "不得表述为绝对安全或百分百预防"
-    }
-  ],
-  "relations": [
-    {
-      "toEntityName": "宫颈癌",
-      "relType": "prevents"
-    }
-  ]
-}
-```
-
-## 入库映射
-
-| 标准化字段 | 数据表 | 说明 |
-| --- | --- | --- |
-| `entity.entityType` | `wiki_entity.entity_type` | 1疾病、2疫苗、3人群、4场景 |
-| `entity.stdName` | `wiki_entity.std_name` | 标准名称 |
-| `entity.alias` | `wiki_entity.alias` | JSON 字符串或数组，接口层建议返回数组 |
-| `entity.summary` | `wiki_entity.summary` | 简介 |
-| `segments[].content` | `wiki_segment.content` | 片段正文 |
-| `segments[].source` | `wiki_segment.source` | 来源 |
-| `rules[]` | `wiki_rule` | MustInclude/MustNotSay/FactRule |
-| `relations[]` | `wiki_relation` | 实体关系 |
-| segment embedding | `wiki_segment_embedding` | 异步生成或懒加载补算 |
-
-## 文档解析与清洗
-
-第一版建议支持：
-
-- TXT
-- Markdown
-- DOCX
-- XLSX/CSV
-- 可复制文本型 PDF
-
-暂缓支持：
-
-- 扫描 PDF
-- 图片 OCR
-- 复杂双栏 PDF
-
-清洗规则：
-
-- 去除空行、重复空白、页眉页脚。
-- 保留标题层级和来源文件名。
-- 过短片段合并，过长片段按段落或长度切分。
-- 删除重复段落。
-
-## 分段规则
-
-优先级：
-
-1. 按标题层级切分。
-2. 按自然段切分。
-3. 单段过长时按 500-1000 中文字切分。
-4. 单段过短时合并相邻段落。
-
-片段格式建议：
-
-```text
-[接种对象] 推荐适龄女性接种……
-[禁忌] 对疫苗成分过敏者禁用……
-```
-
-## 去重与更新策略
-
-建议第一版支持三种模式：
-
-| 模式 | 含义 |
-| --- | --- |
-| append | 只新增，不覆盖旧内容 |
-| merge | 同名实体合并，重复片段跳过 |
-| overwrite | 覆盖该实体旧片段和规则 |
-
-默认使用 `merge`。
-
-去重规则：
-
-- 实体去重：`entity_type + std_name`
-- 片段去重：`entity_id + content_hash`
-- 规则去重：`entity_id + rule_type + content`
-- 关系去重：`from_eid + to_eid + rel_type`
-
-## 异常处理
-
-| 场景 | 处理方式 |
-| --- | --- |
-| 文件为空 | 任务失败，写入 result_msg |
-| 文件格式不支持 | 任务失败，提示支持格式 |
-| 解析失败 | 任务失败，保留原文件路径 |
-| 未识别实体 | 标记待确认，要求人工补 entityName/entityType |
-| 重复实体 | 默认 merge |
-| 部分片段失败 | 成功部分入库，失败部分写 result_msg |
-| embedding 失败 | 不阻断入库，后续懒加载补算 |
-
-## 第一版落地开发清单
-
-1. 新增 `WikiUploadController`
-2. 新增 `WikiUploadService`
-3. 实现文件保存到 `uploads/wiki/yyyyMMdd/`
-4. 写入 `cdc_upload_task`
-5. 实现 TXT/Markdown/DOCX 基础解析
-6. 实现清洗和分段
-7. 实现标准化 Wiki JSON
-8. 实现 merge 模式入库
-9. 实现任务状态更新和错误记录
-10. 接入前端任务查询和确认入库
-
-## 仍需确认
-
-- 预留上传接口是否在未同步代码中存在。
-- 第一版是否必须支持 PDF。
-- 是否需要人工审核后入库。
-- 上传文件存储位置是否有统一规范。
-- 外部解析 API 是否允许作为兜底。
-- 人群/场景/模板是否也走该上传流程。
+- 支持增量更新（按 `entityType + stdName + content_hash` 去重片段）
+- 支持 XLSX/CSV（表格型知识）
+- 支持扫描 PDF + OCR（需要新增 tesseract / 商业 OCR）
+- 接入外部文档解析 API 作为复杂 PDF 兜底
+- 大文件分块上传（当前一次 POST 上传整个文件）

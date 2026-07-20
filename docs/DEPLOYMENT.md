@@ -1,5 +1,7 @@
 # 服务器更新部署指南
 
+> **节点命名说明**：本文件按 graph 节点名引用节点；4 个节点的注册名（`SkillRegistry.get_skill()` 用的 `name` 属性）与 graph 节点名不一致，详见 [ARCHITECTURE.md "已注册节点清单"](../ARCHITECTURE.md)。
+
 本文档记录每个版本的升级部署步骤。按版本从新到旧排列，找到你当前要升级到的版本章节即可。
 
 ---
@@ -31,7 +33,7 @@ docker compose logs -f agent
 
 ## 变更文件清单
 
-```
+```text
 app/workflow/nodes.py        ← compress_knowledge 截断修复
 app/prompts/fusion_generate.py ← 知识片段数量限制
 app/core/llm.py              ← httpx timeout 180s → 300s
@@ -125,7 +127,7 @@ docker compose up -d --build agent
 
 ### 新增文件
 
-```
+```text
 # 写作知识体系（26 个文件）
 app/skills/writing/__init__.py
 app/skills/writing/skill_index.yaml
@@ -167,7 +169,7 @@ app/skills/flow/rule_reflect_skill.py
 
 ### 修改文件
 
-```
+```text
 app/models/state.py
 app/skills/registry.py
 app/workflow/nodes.py
@@ -324,7 +326,7 @@ docker compose ps
 
 ### Backend（cdc-backend/）
 
-```
+```text
 src/main/java/com/cdc/cdcbackend/common/GlobalExceptionHandler.java   ← 新增
 src/main/java/com/cdc/cdcbackend/entity/WikiRule.java
 src/main/java/com/cdc/cdcbackend/controller/ArticleController.java
@@ -339,13 +341,13 @@ src/main/resources/mapper/CdcArticleRequestMapper.xml
 
 ### Agent（cdc-agent/）
 
-```
+```text
 app/api/agent.py
 ```
 
 ### Frontend（cdc-frontend/）
 
-```
+```text
 src/pages/Workbench.jsx
 src/pages/ArticleCreate.jsx
 src/pages/ArticleList.jsx
@@ -354,7 +356,7 @@ src/api/article.js
 
 ### 文档
 
-```
+```text
 CHANGELOG.md
 docs/API.md
 docs/DATA_FLOW.md

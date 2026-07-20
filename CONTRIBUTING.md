@@ -57,7 +57,7 @@ npm run dev
 
 ## 项目结构约定
 
-```
+```text
 cdc/
 ├── cdc-backend/src/main/java/com/cdc/cdcbackend/
 │   ├── controller/    # REST 控制器（一个资源一个 Controller）
@@ -185,7 +185,7 @@ class SentimentAnalyzeSkill(BaseSkill):
 
 ### Commit 格式
 
-```
+```text
 <type>(<scope>): <description>
 
 type: feat | fix | docs | refactor | test | chore

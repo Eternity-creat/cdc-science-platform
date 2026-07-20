@@ -1,5 +1,7 @@
 # 数据流转文档
 
+> **节点命名说明**：本文件按 graph 节点名引用节点；4 个节点的注册名（`SkillRegistry.get_skill()` 用的 `name` 属性）与 graph 节点名不一致，详见 [ARCHITECTURE.md "已注册节点清单"](../ARCHITECTURE.md)。
+
 本文档以一个具体场景为例，走一遍从用户输入到文章生成的完整数据链路。
 
 ## 场景示例
@@ -12,7 +14,7 @@
 
 前端调用创建接口：
 
-```
+```http
 POST /api/article/generate
 {
   "mode": 1,
@@ -38,13 +40,13 @@ POST /api/article/generate
 
 工作台页面加载时调用：
 
-```
+```http
 GET /api/article/context/{articleId}
 ```
 
 **Java 后端查询 5 张表构建上下文：**
 
-```
+```text
 cdc_article_request  → 获取创建参数（entity_id=3, population_id=10001, ...）
      │
      ├─→ wiki_entity WHERE id=3         → HPV疫苗实体详情（std_name, alias, summary）
@@ -73,7 +75,7 @@ cdc_article_request  → 获取创建参数（entity_id=3, population_id=10001, 
 
 用户在工作台点击「生成大纲」：
 
-```
+```http
 POST /api/article/{id}/generate-outline
 ```
 
@@ -177,7 +179,7 @@ vaccine_preprocess 注入疫苗领域规则：
 
 `OutlineGenerateSkill` 通过 `build_outline_prompt(state)` 动态组装 Prompt，注入 Layer 1-3 写作知识（通用规则 + 文章类型蓝图 + 受众画像），并调用 LLM：
 
-```
+```json
 角色：你是疾控中心的健康科普专家。
 任务：根据以下信息生成一篇科普文章的大纲。
 
@@ -252,7 +254,7 @@ Agent 将执行结果打包为 `AgentResponse` 返回给 Java 后端：
 
 用户确认大纲后点击「生成正文」，流程类似但走 **draft_workflow**：
 
-```
+```text
 大纲通过校验 → FusionGenerateSkill（动态 prompt 融合生成）
                    │
          ┌─────────┼─────────┐
@@ -310,7 +312,7 @@ Agent 将执行结果打包为 `AgentResponse` 返回给 Java 后端：
 
 ## 表关系总结
 
-```
+```text
 用户操作
   │
   ▼

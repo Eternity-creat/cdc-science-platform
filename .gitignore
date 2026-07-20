@@ -30,3 +30,6 @@ db/init.sql
 cdc-frontend/node_modules/
 cdc-frontend/dist/
 cdc-frontend/.env.local
+
+# ── Claude Code 本地配置（用户级，不入库） ──
+.claude/

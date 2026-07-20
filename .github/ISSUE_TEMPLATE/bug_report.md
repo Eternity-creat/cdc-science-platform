@@ -34,7 +34,7 @@ assignees: ''
 
 ## 相关日志
 
-```
+```bash
 如有后端或 Agent 的错误日志，请粘贴在这里。
 docker compose logs backend
 docker compose logs agent

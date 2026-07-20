@@ -1,6 +1,59 @@
 # 版本变更记录
 
+> **节点命名说明**：本文件按 graph 节点名引用节点；4 个节点的注册名（`SkillRegistry.get_skill()` 用的 `name` 属性）与 graph 节点名不一致，详见 [ARCHITECTURE.md "已注册节点清单"](./ARCHITECTURE.md)。
+
 本项目的所有重要变更都记录在此文件中。格式基于 [Keep a Changelog](https://keepachangelog.com/)。
+
+## [1.3.0] - 2026-07-19
+
+### 新增（后端架构）
+
+- **Embedding 计算下沉到 Java 端**：新增 `EmbeddingService` + `EmbeddingEventListener`，由 Java 直接调 DashScope `/embeddings`，**不再经 Agent 中转**。每次 `wiki_segment` 增/删/改通过 `SegmentChangedEvent` 异步驱动，`@Async("embeddingExecutor")` 在独立线程池里完成「MD5 哈希 → embedding API → JSON 序列化 → upsert `wiki_segment_embedding`」。
+- **`cdc_embedding_cache` 哈希去重**：`EmbeddingService.computeEmbeddingsWithCache(texts, sourceType, sourceIds)` 先按 `(content_hash, model_version)` 查缓存，未命中再分批（≤25 条/批）调 API，写回缓存表。
+- **惰性 embedding 补算**：`ArticleServiceImpl.buildContextFromArticle` 在加载文章上下文时，检查每个 segment 是否已有 embedding，缺则用上面的缓存 + 直算通道补齐，**保证 Agent 收到的 segments 永远带可用向量**。
+- **`AsyncConfig.embeddingExecutor`**：corePool=2 / maxPool=4 / queueCapacity=50 / prefix=`embedding-`。
+
+### 新增（Agent 流式）
+
+- **SSE `replace` 事件转发**：`AgentClient.handleSseMessage` 在收到 Agent 的 `event: replace` 时通过 `onReplace` 回调推给前端，让前端清空已累积内容并整体替换，避免初稿生成阶段出现"前后两版叠加"的渲染 bug（commit `20e27c0`）。
+- **`citedSegmentCount` 改实际引用数**：fusion_generate 节点（`FusionGenerateSkill` 实现类）把草稿中真实出现的 `{ref:N}` 数量回传到 `generation_meta.citedSegmentCount`，而不是 RAG 检索返回的 Top-K 数（commit `f6d7a5c` 起多个修复）。
+- **`citedSegmentIds`**：新增字段，把实际被引用的 segment DB ID 列表写入 `generation_meta`，前端可基于此精确构建引用角标。
+
+### 新增（前端）
+
+- **右侧 Pipeline 面板美化**：状态色边框、操作图标、diff 色条；指标标签防截断；实体信息表格对齐（commit `980357d`、`99b241d`、`83586b4`、`a09d69d`）。
+- **上下文面板布局美化**：修复配图段落标签显示位置（commit `790b13e`）。
+- **配图面板重构**：单列全宽、删除二次确认并同步清除草稿引用、生成后弹窗确认插入、对齐调整不重复插入、上传图持久化用户选择的段落到 DB、终稿阶段隐藏生成/上传按钮（`6972b20` ~ `15acaac` 系列提交）。
+- **合并文章与上下文加载**：消除引用标签和右侧面板渲染闪烁（commit `849f990`）。
+- **知识引用数量改 Agent RAG 直传**：`citedSegmentCount` 与 `citedSegmentIds` 直接透传展示，citation badge 改为方形（commit `b713ce4`）。
+- **历史回退生效修复**：`5548842`、`609dce1`、`8ea989f`、`73060c4`、`f9a623d` 一系列修复，确保 `revertToModification` 真正把目标版本写回 article，且回退本身也作为一条 `revert` 类型 modification 留痕。
+- **`normalizeContent` 历史转义归一化**：处理早前端多次 JSON 双重编码导致的脏数据（commit `c4efdfd`）。
+
+### 新增（Agent RAG 优化）
+
+- **`rag_retrieval.prefilter_segments`**（commit `e6acdd9`）：第一层预过滤区分主实体（disease/vaccine）与上下文实体（population/scene），避免不相关场景片段靠向量高分挤进 Top-K；保留无 `owner_entity_type` 的老数据向后兼容。
+- **`agent trace` 显示增强**（commit `d19da0f`）：Pipeline 组件显示每个节点的步骤名、耗时、输出字符/段落数、模型、输入输出预览。
+
+### 修复
+
+- **初稿流式渲染重复**：commit `20e27c0` 转发 Agent `replace` SSE 事件到前端（曾被 `a8ff77d` revert 后重新以正确语义落地）。
+- **段落标签位置**：commit `27eb82d` 让图片段落编号从 heading 中正确提取展示。
+- **历史回退可视化**：`5548842` 让 history revert 应用的内容在 UI 上立即可见。
+- **`c4efdfd`** 旧版历史换行归一化，避免 `\r\n` vs `\n` 造成 diff 误判。
+
+### 变更
+
+- `WikiServiceImpl` 在 segment / rule / relation 的 CRUD 上统一发 `SegmentChangedEvent`，由 `EmbeddingEventListener` 异步补算向量
+- `ArticleServiceImpl.buildContextFromArticle` 在加载 segments 时增加 `lazyComputeEmbeddings` 步骤
+- `AgentClient.buildAndStream` 新增 `onReplace` Consumer，对应 SSE `event: replace` 的清空 + 替换语义
+- `ArticleController` 暴露 `/generate-outline/stream`、`/generate-draft/stream`、`/regenerate-outline/stream`、`/regenerate-draft/stream` 四个 SSE 端点
+
+## [1.2.2] - 2026-07-05
+
+### 修复
+
+- **后端部署触发**：commit `e6192a9` 同步后端镜像构建与部署流水线修复
+- **前端依赖锁同步**：commit `0de9e50` 同步 `package-lock.json`
 
 ## [1.2.1] - 2026-06-21
 

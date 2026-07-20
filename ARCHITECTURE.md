@@ -6,7 +6,7 @@
 
 系统采用三服务分离架构，通过 Nginx 反向代理对外暴露统一入口：
 
-```
+```text
 用户浏览器
     │
     ▼
@@ -56,7 +56,7 @@ Agent 的核心是两条 LangGraph 编译工作流，共享同一个状态对象
 
 ### 大纲工作流（outline_workflow）
 
-```
+```json
 __start__
   │
   ├─[表单模式]─→ 跳过意图解析 ──────────────┐
@@ -112,7 +112,7 @@ __start__
 
 在大纲工作流基础上延伸：
 
-```
+```json
 OutlineGenerateSkill 完成
           │
           ▼
@@ -161,78 +161,89 @@ finalize            │              └─ 否 → finalize → [END]
 | `should_validate_outline` | `outline_valid == true` → 大纲通过；否则 → 大纲重新生成 |
 | `quality_gate` | 三路并行校验后统一路由：`is_fact_ok && rule_passed` → 进入润色（polish）；`retry_times >= 3` → 强制结束（finalize）；事实失败 → 反思迭代（reflect）；规则失败 → 规则修正（rule_reflect） |
 
-## Skill 系统
+## 节点体系
+
+> **术语约定**：LangGraph 工作流里的执行单元统称**节点（node）**；`app/skills/writing/` 下的 6 层渐进式披露的写作知识体系才是项目里的 **Skill**（写作经验包）。`app/skills/flow/` 与 `app/skills/wiki/` 下的执行单元虽然 Python 类名带 `Skill` 后缀，但语义上是"被节点调用的具体能力"——它们的调用方是节点，不是 Skill。
+>
+> 注册方式：所有 17 个执行能力通过 `BaseSkill` 抽象类实现，由 `SkillRegistry` 单例统一注册；LangGraph 节点通过 `SkillRegistry.get_skill(name).execute(state)` 调用。下文统称"已注册节点"。
 
 ### 设计原则
 
-所有 Skill 继承 `BaseSkill` 抽象类，遵循四个原则：单一职责（每个 Skill 只做一件事）、纯函数（不修改输入 state，返回新 state）、标准化 I/O（统一的 `Dict[str, Any]` 状态包）、独立可测（每个 Skill 可单独运行测试）。
+所有已注册节点继承 `BaseSkill` 抽象类，遵循四个原则：单一职责（每个节点只做一件事）、纯函数（不修改输入 state，返回新 state）、标准化 I/O（统一的 `Dict[str, Any]` 状态包）、独立可测（每个节点可单独运行测试）。
 
-### Skill 清单
+### 已注册节点清单（17 个）
+
+> 三个名字必须区分清楚，全部来自代码、都不动：
+> - **类名**（`XxxSkill`）—— Python 实现类，定义在 `app/skills/flow/*.py` 和 `app/skills/wiki/*.py`
+> - **注册名**（类里 `name` 属性的返回值）—— `SkillRegistry.register(...)` 用它建索引，`SkillRegistry.get_skill("xxx")` 也按它查
+> - **graph 节点名**（`graph.add_node("xxx", ...)` 的第一个参数）—— LangGraph 工作流图里的节点 key
+>
+> 多数情况下注册名 = graph 节点名；只有 4 个不一致，下表把三列都列出来便于一眼对照。
 
 **规划类（planning）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `SkillPlannerSkill` | 分类文章类型、匹配受众画像、选择写作技法、预加载 Layer 2-5 知识 | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `skill_planner` | `skill_planner` | `SkillPlannerSkill` | 分类文章类型、匹配受众画像、选择写作技法、预加载 Layer 2-5 知识 | 是 |
 
 **解析类（parsing）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `IntentParseSkill` | 从自由文本提取实体类型、实体名、人群、场景、字数 | 是 |
-| `CompressSkill` | 压缩用户输入以减少 token 消耗，支持无损/语义两种模式 | 是 |
-| `SectionAnalyzeSkill` | 分析正文段落，标记需要配图的位置 | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `intent_parse` | `intent_parse` | `IntentParseSkill` | 从自由文本提取实体类型、实体名、人群、场景、字数 | 是 |
+| `compress` | `compress_input` | `CompressSkill` | 压缩用户输入以减少 token 消耗，支持无损/语义两种模式 | 是 |
 
 **检索类（retrieval）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `EntityFetchSkill` | 提取主实体详细信息（纯数据转换） | 否 |
-| `RelationFetchSkill` | 提取关联实体信息（纯数据转换） | 否 |
-| `TemplateExtractSkill` | 规范化模板元数据（纯数据转换） | 否 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `entity_fetch` | `entity_extract` | `EntityFetchSkill` | 提取主实体详细信息（纯数据转换） | 否 |
+| `relation_fetch` | `wiki_relation` | `RelationFetchSkill` | 提取关联实体信息（纯数据转换） | 否 |
+| `template_extract` | `template_load` | `TemplateExtractSkill` | 规范化模板元数据（纯数据转换） | 否 |
 
 **生成类（generation）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `OutlineGenerateSkill` | 基于模板 + 知识片段 + 规则 + Skill 知识生成文章大纲（动态 prompt） | 是 |
-| `FusionGenerateSkill` | 融合大纲、知识、规则、Skill 知识生成完整正文，带 `{ref:N}` 引用标记（动态 prompt） | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `outline_generate` | `outline_generate` | `OutlineGenerateSkill` | 基于模板 + 知识片段 + 规则 + 写作体系生成文章大纲（动态 prompt） | 是 |
+| `fusion_generate` | `fusion_generate` | `FusionGenerateSkill` | 融合大纲、知识、规则、写作体系生成完整正文，带 `{ref:N}` 引用标记（动态 prompt） | 是 |
 
 **校验类（validation）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `OutlineValidateSkill` | 校验大纲结构完整性、must_include 覆盖、蓝图必需章节 | 是 |
-| `FactCheckSkill` | 逐句比对权威知识片段，验证事实准确性和引用标注 | 是 |
-| `RuleCheckSkill` | 校验 must_include 覆盖和 must_not_say 规避，输出详细报告 | 是 |
-| `StyleCheckSkill` | 评估可读性（句长、被动语态、专业术语密度等 6 维），输出 style_score | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `outline_validate` | `outline_validate` | `OutlineValidateSkill` | 校验大纲结构完整性、must_include 覆盖、蓝图必需章节 | 是 |
+| `fact_check` | `fact_check` | `FactCheckSkill` | 逐句比对权威知识片段，验证事实准确性和引用标注 | 是 |
+| `rule_check` | `rule_check` | `RuleCheckSkill` | 校验 must_include 覆盖和 must_not_say 规避，输出详细报告 | 是 |
+| `style_check` | `style_check` | `StyleCheckSkill` | 评估可读性（句长、被动语态、专业术语密度等 6 维），输出 style_score | 是 |
 
 **迭代类（iteration）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `ReflectIterateSkill` | 根据事实核查报告局部修正错误句子，保留 `{ref:N}` 标注，最多重试 3 次 | 是 |
-| `RuleReflectSkill` | 根据规则检查报告补充缺失要点、删除违规表述 | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `reflect_iterate` | `reflect_iterate` | `ReflectIterateSkill` | 根据事实核查报告局部修正错误句子，保留 `{ref:N}` 标注，最多重试 3 次 | 是 |
+| `rule_reflect` | `rule_reflect` | `RuleReflectSkill` | 根据规则检查报告补充缺失要点、删除违规表述 | 是 |
 
 **润色类（polish）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `PolishSkill` | 平滑过渡、消除冗余、统一语气，保留事实和 `{ref:N}` 标注 | 是 |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `polish` | `polish` | `PolishSkill` | 平滑过渡、消除冗余、统一语气，保留事实和 `{ref:N}` 标注 | 是 |
 
-**图片类（image）：**
+**图片类（image，不进入 LangGraph graph，仅供 `/api/agent/generate-images` 端点调用）：**
 
-| Skill | 功能 | 调用 LLM |
-|-------|------|----------|
-| `ImageGenerateSkill` | 调用多模态 API 生成配图并下载到本地 | 是（图片模型） |
+| 注册名 | graph 节点名 | 实现类 | 功能 | 调用 LLM |
+|---|---|---|---|---|
+| `section_analyze` | — | `SectionAnalyzeSkill` | 分析正文段落，标记需要配图的位置 | 是 |
+| `image_generate` | — | `ImageGenerateSkill` | 调用多模态 API 生成配图并下载到本地 | 是（图片模型） |
 
 ## 写作知识体系（Writing Skill System）
 
-Agent 集成了 6 层渐进式披露的写作知识体系，由 `SkillPlannerSkill` 和 `SkillLoader` 协作实现。LLM 在生成大纲和正文时，不再使用固定的 prompt 模板，而是根据文章类型、受众和技法动态注入对应层级的写作知识。
+Agent 集成了 6 层渐进式披露的写作知识体系（这是项目里**真正叫 Skill 的部分**），由 `skill_planner` 节点（`SkillPlannerSkill` 实现类）和 `SkillLoader` 协作实现。LLM 在生成大纲和正文时，不再使用固定的 prompt 模板，而是根据文章类型、受众和技法动态注入对应层级的写作知识。
 
 ### 层级结构
 
-```
+```text
 Layer 0: skill_index.yaml（元索引）
   │  列出所有文章类型、受众画像、技法卡片的代码和文件路径
   │
@@ -262,7 +273,7 @@ Layer 5: quality/{type}.md（质量基准，按类型加载）
 
 ### 目录结构
 
-```
+```text
 app/skills/writing/
 ├── skill_index.yaml          # Layer 0: 元索引
 ├── universal_rules.md        # Layer 1: 通用规则
@@ -302,7 +313,7 @@ app/skills/writing/
 
 Agent 采用三层级联配置机制，运行时动态选择模型：
 
-```
+```text
 优先级 1：Java 数据库配置（cdc_llm_config 表）
     ↓ 未找到
 优先级 2：文本子类型回退（fact_check → text_generation）
@@ -328,7 +339,7 @@ Agent 采用三层级联配置机制，运行时动态选择模型：
 
 ### ER 关系图
 
-```
+```text
                         ┌──────────────────┐
                         │  wiki_entity     │
                         │  (疾病/疫苗/     │
@@ -393,7 +404,7 @@ Agent 采用三层级联配置机制，运行时动态选择模型：
 
 ### 文章状态机
 
-```
+```http
 status=1 (待生成大纲)
     │  POST /api/article/{id}/generate-outline
     ▼
