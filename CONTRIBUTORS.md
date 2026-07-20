@@ -120,7 +120,7 @@
 | Name | Role |
 |---|---|
 | Mao Yinji | 人群和场景知识库数据集构建 |
-| Tian Yanjing | 人群和场景知识库数据集构建 |
+| Tian Yanjing | 人群和场景知识库数据集构建、项目前期数据调研整理 |
 
 ## External Open-Source Contributors
 
